@@ -3,12 +3,10 @@ const bcrypt   = require("bcryptjs");
 
 const advocateSchema = new mongoose.Schema(
   {
-    // ─── Personal Details ────────────────────────────────
     fullName:    { type: String, required: [true, "Full name is required"], trim: true },
     dateOfBirth: { type: Date,   required: [true, "Date of birth is required"] },
     gender:      { type: String, enum: ["male", "female", "other"], required: [true, "Gender is required"] },
 
-    // ─── Contact Details ─────────────────────────────────
     mobile: {
       type: String, required: [true, "Mobile number is required"],
       unique: true, trim: true, match: [/^[6-9]\d{9}$/, "Invalid mobile number"],
@@ -17,14 +15,24 @@ const advocateSchema = new mongoose.Schema(
       type: String, required: [true, "Email is required"],
       unique: true, lowercase: true, trim: true,
       match: [/^\S+@\S+\.\S+$/, "Invalid email address"],
+      maxlength: [30, "Email must not exceed 30 characters"],
     },
     password: {
       type: String, required: [true, "Password is required"],
-      minlength: [8, "Password must be at least 8 characters"], select: false,
+      minlength: [8, "Password must be at least 8 characters"],
+      maxlength: [128, "Password too long"],  
+      select: false,
     },
 
     // ─── Professional Details ────────────────────────────
-    barCouncilNumber: { type: String, required: [true, "Bar Council number is required"], unique: true, trim: true },
+    barCouncilNumber: {
+      type: String,
+      required: [true, "Bar Council number is required"],
+      unique: true,
+      trim: true,
+      uppercase: true,
+      match: [/^[A-Z]{1,4}\/\d{1,6}\/\d{4}$/, "Invalid Bar Council number format. Expected: STATE/NUMBER/YEAR (e.g. D/123/2020)"],
+    },
     barCouncilState:  { type: String, required: [true, "Bar Council state is required"], trim: true },
     yearOfEnrollment: {
       type: Number, required: [true, "Year of enrollment is required"],
@@ -59,7 +67,6 @@ const advocateSchema = new mongoose.Schema(
       panCard:               { type: String, required: [true, "PAN card photo is required"] },
       barCouncilCertificate: { type: String, required: [true, "Bar Council certificate is required"] },
     },
-    liveSelfie: { type: String, required: [true, "Live selfie is required"] },
 
     // ─── Bank Details ────────────────────────────────────
     bankDetails: {
@@ -70,7 +77,7 @@ const advocateSchema = new mongoose.Schema(
       upiId:             { type: String, trim: true, default: null },
     },
 
-    // ─── Availability — NO enum, free string array ────────
+    // ─── Availability ─────────────────────────────────────
     availableDays: { type: [String], required: [true, "Available days are required"] },
     availableHours: {
       from: { type: String, required: [true, "Available from time is required"] },
@@ -82,8 +89,23 @@ const advocateSchema = new mongoose.Schema(
     isEmailVerified:  { type: Boolean, default: false },
     isMobileVerified: { type: Boolean, default: false },
 
-    // ─── Active — seedha true, koi approval nahi ─────────
-    isActive: { type: Boolean, default: true },
+    // ─── Document & Approval Status ──────────────────────
+    documentStatus: {
+      type: String,
+      enum: ["not_uploaded", "pending_review", "verified", "approved", "rejected"],
+      default: "not_uploaded",
+    },
+
+    approvalStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+
+    rejectionReason: { type: String, default: null },
+
+    // ─── Active ───────────────────────────────────────────
+    isActive: { type: Boolean, default: false },
 
     // ─── Role ────────────────────────────────────────────
     role: { type: String, default: "advocate" },

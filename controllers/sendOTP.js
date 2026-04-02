@@ -1,11 +1,11 @@
 const nodemailer = require("nodemailer");
 
-// ─── Random 6 digit OTP banao ────────────────────────────
+// ─── Random 6 digit OTP ───────────────────────────────────
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// ─── Email Transporter Setup ─────────────────────────────
+// ─── Email Transporter ───────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: process.env.EMAIL_PORT,
@@ -16,7 +16,9 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ─── OTP Email Template ───────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// OTP Email Template
+// ═══════════════════════════════════════════════════════════
 const sendOTPEmail = async (email, otp, purpose) => {
   const subject =
     purpose === "email_verify"
@@ -96,7 +98,148 @@ const sendOTPEmail = async (email, otp, purpose) => {
   });
 };
 
-// ─── Approval Email Template ──────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Admin Notification — New Advocate Registered
+// Sent to ADMIN_EMAIL when a new advocate completes registration
+// advocate: full Mongoose document
+// ═══════════════════════════════════════════════════════════
+const sendAdminNewAdvocateNotification = async (advocate) => {
+  const adminEmail = process.env.EMAIL_USER; // same email used for sending — your admin inbox
+
+  const dob = advocate.dateOfBirth
+    ? new Date(advocate.dateOfBirth).toLocaleDateString("en-IN")
+    : "N/A";
+
+  const message = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>New Advocate Registration</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f4f7; font-family: Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7; padding: 40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1a237e, #283593); padding: 36px 40px; text-align:center;">
+              <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:800; letter-spacing:1px;">⚖️ E-NOTARY — Admin Panel</h1>
+              <p style="margin:8px 0 0; color:rgba(255,255,255,0.8); font-size:13px; letter-spacing:2px; text-transform:uppercase;">New Advocate Registration Alert</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 36px 40px 20px;">
+              <p style="margin:0 0 6px; color:#333; font-size:16px; font-weight:600;">👤 A new advocate has registered and requires your review.</p>
+              <p style="margin:0 0 24px; color:#666; font-size:14px;">Please verify the documents and take action (Approve / Reject).</p>
+
+              <!-- Details Table -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e0e0e0; border-radius:10px; overflow:hidden;">
+                <tr style="background:#f5f5f5;">
+                  <td style="padding:10px 16px; font-size:13px; color:#555; font-weight:700; width:40%; border-bottom:1px solid #e0e0e0;">Field</td>
+                  <td style="padding:10px 16px; font-size:13px; color:#555; font-weight:700; border-bottom:1px solid #e0e0e0;">Value</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Full Name</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#1a237e; border-bottom:1px solid #f0f0f0; font-weight:700;">${advocate.fullName}</td>
+                </tr>
+                <tr style="background:#fafafa;">
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Date of Birth</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0;">${dob}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Gender</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; text-transform:capitalize;">${advocate.gender}</td>
+                </tr>
+                <tr style="background:#fafafa;">
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Email</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0;">${advocate.email}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Mobile</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0;">${advocate.mobile}</td>
+                </tr>
+                <tr style="background:#fafafa;">
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Aadhaar Number</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-family:monospace; letter-spacing:2px;">${advocate.aadhaarNumber}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">PAN Number</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-family:monospace; letter-spacing:2px;">${advocate.panNumber}</td>
+                </tr>
+                <tr style="background:#fafafa;">
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Bar Council Number</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#1a237e; border-bottom:1px solid #f0f0f0; font-weight:700; font-family:monospace;">${advocate.barCouncilNumber}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0; font-weight:600;">Bar Council State</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333; border-bottom:1px solid #f0f0f0;">${advocate.barCouncilState}</td>
+                </tr>
+                <tr style="background:#fafafa;">
+                  <td style="padding:10px 16px; font-size:14px; color:#333; font-weight:600;">Year of Enrollment</td>
+                  <td style="padding:10px 16px; font-size:14px; color:#333;">${advocate.yearOfEnrollment}</td>
+                </tr>
+              </table>
+
+              <!-- Documents note -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+                <tr>
+                  <td style="background:#e8f4fd; border:1px solid #bbdefb; border-left:4px solid #1565c0; border-radius:8px; padding:14px 16px;">
+                    <p style="margin:0 0 6px; color:#1565c0; font-size:13px; font-weight:700;">📄 Documents Uploaded:</p>
+                    <p style="margin:0; color:#333; font-size:13px; line-height:1.8;">
+                      ✅ Aadhaar Front &nbsp;|&nbsp; ✅ Aadhaar Back &nbsp;|&nbsp; ✅ PAN Card &nbsp;|&nbsp; ✅ Bar Council Certificate &nbsp;|&nbsp; ✅ Live Selfie
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Advocate ID reference for admin -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+                <tr>
+                  <td style="background:#f0f4ff; border:1px solid #c5cae9; border-left:4px solid #1a237e; border-radius:8px; padding:14px 16px;">
+                    <p style="margin:0 0 4px; color:#1a237e; font-size:13px; font-weight:700;">🆔 Advocate ID (for admin panel lookup):</p>
+                    <p style="margin:0; color:#333; font-size:14px; font-family:monospace; letter-spacing:1px;">${advocate._id}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0; color:#999; font-size:12px; text-align:center;">
+                This is an automated notification from E-Notary. Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9f9f9; padding:24px 40px; text-align:center; border-top:1px solid #f0f0f0;">
+              <p style="margin:0 0 6px; color:#bbb; font-size:12px;">© ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.</p>
+              <p style="margin:0; color:#bbb; font-size:12px;">India's Legal Execution Infrastructure</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from: `"E-Notary System" <${process.env.EMAIL_USER}>`,
+    to: adminEmail,
+    subject: `🔔 New Advocate Registration — ${advocate.fullName} (Action Required)`,
+    html: message,
+  });
+};
+
+// ═══════════════════════════════════════════════════════════
+// Approval Email
+// ═══════════════════════════════════════════════════════════
 const sendApprovalEmail = async (email, fullName) => {
   const message = `
 <!DOCTYPE html>
@@ -166,7 +309,9 @@ const sendApprovalEmail = async (email, fullName) => {
   });
 };
 
-// ─── Rejection Email Template ─────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Rejection Email
+// ═══════════════════════════════════════════════════════════
 const sendRejectionEmail = async (email, fullName, reason) => {
   const message = `
 <!DOCTYPE html>
@@ -245,7 +390,9 @@ const sendRejectionEmail = async (email, fullName, reason) => {
   });
 };
 
-// ─── Forget Password OTP Email Template ──────────────────
+// ═══════════════════════════════════════════════════════════
+// Forget Password OTP Email
+// ═══════════════════════════════════════════════════════════
 const sendForgetPasswordOTP = async (email, otp) => {
   const message = `
 <!DOCTYPE html>
@@ -323,7 +470,8 @@ const sendForgetPasswordOTP = async (email, otp) => {
 module.exports = {
   generateOTP,
   sendOTPEmail,
+  sendAdminNewAdvocateNotification,
   sendApprovalEmail,
   sendRejectionEmail,
-  sendForgetPasswordOTP, // ← naya
+  sendForgetPasswordOTP,
 };

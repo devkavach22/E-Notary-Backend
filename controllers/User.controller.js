@@ -1,4 +1,5 @@
 const User      = require("../models/User");
+const Advocate  = require("../models/Advocate");
 const OTP       = require("../models/OTP");
 const Tesseract = require("tesseract.js");
 const { createCanvas, loadImage } = require("canvas");
@@ -197,6 +198,9 @@ const validatePassword = (password) => {
 };
 
 
+// ═══════════════════════════════════════════════════════════
+// UserverifyDocuments
+// ═══════════════════════════════════════════════════════════
 const UserverifyDocuments = async (req, res) => {
   try {
     const files = req.files;
@@ -353,6 +357,9 @@ const UserverifyDocuments = async (req, res) => {
 };
 
 
+// ═══════════════════════════════════════════════════════════
+// registerUser
+// ═══════════════════════════════════════════════════════════
 const registerUser = async (req, res) => {
   try {
     const {
@@ -488,11 +495,13 @@ const registerUser = async (req, res) => {
 };
 
 
+// ═══════════════════════════════════════════════════════════
+// getUserById
+// ═══════════════════════════════════════════════════════════
 const getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select("-password");
 
-    // Not found (404)
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
 
@@ -501,7 +510,6 @@ const getUserById = async (req, res) => {
   } catch (error) {
     console.error("getUserById Error:", error);
 
-    // Invalid MongoDB ObjectId format → treat as not found (404)
     if (error.name === "CastError" && error.kind === "ObjectId")
       return res.status(404).json({ success: false, message: "User not found" });
 
@@ -509,4 +517,61 @@ const getUserById = async (req, res) => {
   }
 };
 
-module.exports = { UserverifyDocuments, registerUser, getUserById };
+
+// ═══════════════════════════════════════════════════════════
+// @route  GET /api/user/advocates?caseType=Divorce & Family Law
+// User selects a case type → returns matching active & approved advocates
+// Use caseType=all to fetch all available advocates
+// ═══════════════════════════════════════════════════════════
+const getAdvocatesForUser = async (req, res) => {
+  try {
+    const { caseType } = req.query;
+
+    if (!caseType || !caseType.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "caseType query parameter is required. Use 'all' to fetch all advocates.",
+      });
+    }
+
+    const baseFilter = { isActive: true, approvalStatus: "approved" };
+
+    const filter =
+      caseType.trim().toLowerCase() === "all"
+        ? baseFilter
+        : {
+            ...baseFilter,
+            practiceAreas: {
+              $elemMatch: { $regex: new RegExp(`^${caseType.trim()}$`, "i") },
+            },
+          };
+
+    const advocates = await Advocate.find(filter)
+      .select(
+        "fullName city state barCouncilState practiceAreas " +
+        "languagesKnown availableDays availableHours perDocumentFee yearOfEnrollment"
+      )
+      .sort({ createdAt: -1 });
+
+    if (advocates.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No advocates found for case type: ${caseType}`,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      caseType: caseType.trim(),
+      total:    advocates.length,
+      data:     advocates,
+    });
+
+  } catch (error) {
+    console.error("getAdvocatesForUser Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+
+module.exports = { UserverifyDocuments, registerUser, getUserById, getAdvocatesForUser };
