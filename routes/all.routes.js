@@ -3,7 +3,7 @@ const router  = express.Router();
 
 const {
   sendOTP, verifyOTP, sendMobileOTP, verifyMobileOTP,
-   registerAdvocate, getAdvocateById, getAdvocatesByType,getPracticeAreas
+   registerAdvocate, getAdvocateById,getPracticeAreas
 } = require("../controllers/advocate.controller");
 
 const { login, sendForgetPasswordOtp, confirmPassword } = require("../controllers/Auth.controller");
