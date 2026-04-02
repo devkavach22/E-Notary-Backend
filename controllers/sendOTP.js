@@ -467,6 +467,201 @@ const sendForgetPasswordOTP = async (email, otp) => {
   });
 };
 
+// emailService.js mein yeh 2 functions replace karo
+
+const sendBookingEmailToUser = async ({
+  userEmail, userName, advocateName, caseType, bookingId,
+}) => {
+  const message = `
+<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" 
+        style="background:#fff;border-radius:12px;overflow:hidden;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#e8193c,#c0122e);
+            padding:36px 40px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">
+              ⚖️ E-NOTARY
+            </h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;
+              letter-spacing:2px;text-transform:uppercase;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 40px;">
+            <h2 style="color:#1a1a1a;margin:0 0 16px;">Request Submitted!</h2>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              Dear <strong>${userName}</strong>,
+            </p>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              Your request has been sent to <strong>${advocateName}</strong>. 
+              The advocate will review your case and contact you to schedule a meeting.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" 
+              style="background:#f9f9f9;border:1px solid #e0e0e0;
+              border-radius:10px;margin:20px 0;">
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Booking ID</span><br/>
+                  <strong style="color:#333;font-family:monospace;">${bookingId}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Advocate</span><br/>
+                  <strong style="color:#333;">${advocateName}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;">
+                  <span style="color:#888;font-size:13px;">Case Type</span><br/>
+                  <strong style="color:#333;">${caseType}</strong>
+                </td>
+              </tr>
+            </table>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#fff8f0;border-left:4px solid #f5a623;
+                  border-radius:6px;padding:14px 16px;">
+                  <p style="margin:0;color:#7a5200;font-size:13px;line-height:1.6;">
+                    The advocate will reach out to you shortly to confirm 
+                    the meeting date and time.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9f9f9;padding:24px 40px;
+            text-align:center;border-top:1px solid #f0f0f0;">
+            <p style="margin:0;color:#bbb;font-size:12px;">
+              © ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from:    `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to:      userEmail,
+    subject: `📋 Booking Request Sent — ${advocateName} | E-Notary`,
+    html:    message,
+  });
+};
+
+
+const sendBookingEmailToAdvocate = async ({
+  advocateEmail, advocateName, userName,
+  userMobile, caseType, message, bookingId,
+}) => {
+  const emailBody = `
+<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" 
+        style="background:#fff;border-radius:12px;overflow:hidden;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#1a237e,#283593);
+            padding:36px 40px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">
+              ⚖️ E-NOTARY
+            </h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;
+              letter-spacing:2px;text-transform:uppercase;">
+              New Client Request
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 40px;">
+            <h2 style="color:#1a1a1a;margin:0 0 16px;">New Client Request!</h2>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              Dear <strong>${advocateName}</strong>,
+            </p>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              A new client wants your legal assistance. 
+              Please review and schedule a meeting with them.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" 
+              style="background:#f9f9f9;border:1px solid #e0e0e0;
+              border-radius:10px;margin:20px 0;">
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Booking ID</span><br/>
+                  <strong style="color:#333;font-family:monospace;">${bookingId}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Client Name</span><br/>
+                  <strong style="color:#1a237e;">${userName}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Client Mobile</span><br/>
+                  <strong style="color:#333;">${userMobile}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Case Type</span><br/>
+                  <strong style="color:#333;">${caseType}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;">
+                  <span style="color:#888;font-size:13px;">Message from Client</span><br/>
+                  <strong style="color:#333;">${message}</strong>
+                </td>
+              </tr>
+            </table>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#e8f4fd;border-left:4px solid #1565c0;
+                  border-radius:6px;padding:14px 16px;">
+                  <p style="margin:0;color:#1565c0;font-size:13px;line-height:1.6;">
+                    Please login to your dashboard and schedule a meeting 
+                    with this client at your earliest convenience.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9f9f9;padding:24px 40px;
+            text-align:center;border-top:1px solid #f0f0f0;">
+            <p style="margin:0;color:#bbb;font-size:12px;">
+              © ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from:    `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to:      advocateEmail,
+    subject: `🔔 New Client Request — ${userName} | E-Notary`,
+    html:    emailBody,
+  });
+};
 module.exports = {
   generateOTP,
   sendOTPEmail,
@@ -474,4 +669,6 @@ module.exports = {
   sendApprovalEmail,
   sendRejectionEmail,
   sendForgetPasswordOTP,
+  sendBookingEmailToUser,
+  sendBookingEmailToAdvocate,
 };
