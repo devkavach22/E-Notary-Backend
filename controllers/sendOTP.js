@@ -467,7 +467,6 @@ const sendForgetPasswordOTP = async (email, otp) => {
   });
 };
 
-// emailService.js mein yeh 2 functions replace karo
 
 const sendBookingEmailToUser = async ({
   userEmail, userName, advocateName, caseType, bookingId,
@@ -552,13 +551,12 @@ const sendBookingEmailToUser = async ({
 </html>`;
 
   await transporter.sendMail({
-    from:    `"E-Notary" <${process.env.EMAIL_USER}>`,
-    to:      userEmail,
+    from: `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to: userEmail,
     subject: `📋 Booking Request Sent — ${advocateName} | E-Notary`,
-    html:    message,
+    html: message,
   });
 };
-
 
 const sendBookingEmailToAdvocate = async ({
   advocateEmail, advocateName, userName,
@@ -656,10 +654,165 @@ const sendBookingEmailToAdvocate = async ({
 </html>`;
 
   await transporter.sendMail({
-    from:    `"E-Notary" <${process.env.EMAIL_USER}>`,
-    to:      advocateEmail,
+    from: `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to: advocateEmail,
     subject: `🔔 New Client Request — ${userName} | E-Notary`,
-    html:    emailBody,
+    html: emailBody,
+  });
+};
+
+const sendMeetingConfirmationToUser = async ({
+  userEmail, userName, advocateName,
+  caseType, meetingDate, meetingTime, meetLink, bookingId,
+}) => {
+  const message = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Meeting Confirmed</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+        style="background:#fff;border-radius:12px;overflow:hidden;
+        box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+ 
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#e8193c,#c0122e);
+            padding:36px 40px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">
+              ⚖️ E-NOTARY
+            </h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;
+              letter-spacing:2px;text-transform:uppercase;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+ 
+        <!-- Icon -->
+        <tr>
+          <td align="center" style="padding:36px 40px 0;">
+            <span style="font-size:60px;">📅</span>
+          </td>
+        </tr>
+ 
+        <!-- Body -->
+        <tr>
+          <td style="padding:24px 40px 20px;text-align:center;">
+            <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:22px;">
+              Meeting Confirmed!
+            </h2>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              Dear <strong>${userName}</strong>,<br/>
+              Your meeting with <strong>${advocateName}</strong> has been
+              <strong style="color:#27ae60;">confirmed</strong>.
+              Please join the video call at the scheduled time.
+            </p>
+ 
+            <!-- Meeting Details -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#f9f9f9;border:1px solid #e0e0e0;
+              border-radius:10px;margin:20px 0;text-align:left;">
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Booking ID</span><br/>
+                  <strong style="color:#333;font-family:monospace;font-size:13px;">
+                    ${bookingId}
+                  </strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Advocate</span><br/>
+                  <strong style="color:#333;">${advocateName}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Case Type</span><br/>
+                  <strong style="color:#333;">${caseType}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">📅 Date</span><br/>
+                  <strong style="color:#1a237e;">${meetingDate}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">🕐 Time</span><br/>
+                  <strong style="color:#1a237e;">${meetingTime}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;">
+                  <span style="color:#888;font-size:13px;">🎥 Video Call Link</span><br/>
+                  <a href="${meetLink}"
+                    style="color:#e8193c;font-weight:700;font-size:14px;
+                    word-break:break-all;">${meetLink}</a>
+                </td>
+              </tr>
+            </table>
+ 
+            <!-- Join Button -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 20px;">
+              <tr>
+                <td align="center">
+                  <a href="${meetLink}"
+                    style="display:inline-block;background:linear-gradient(135deg,#e8193c,#c0122e);
+                    color:#fff;font-size:15px;font-weight:700;padding:14px 40px;
+                    border-radius:8px;text-decoration:none;">
+                    🎥 Join Video Call
+                  </a>
+                </td>
+              </tr>
+            </table>
+ 
+            <!-- Warning -->
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#fff8f0;border-left:4px solid #f5a623;
+                  border-radius:6px;padding:14px 16px;text-align:left;">
+                  <p style="margin:0;color:#7a5200;font-size:13px;line-height:1.6;">
+                    ⚠️ Please join the call on time. The link is valid only for
+                    this specific meeting. Do not share it with anyone.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+ 
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9f9f9;padding:24px 40px;
+            text-align:center;border-top:1px solid #f0f0f0;">
+            <p style="margin:0 0 6px;color:#bbb;font-size:12px;">
+              © ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.
+            </p>
+            <p style="margin:0;color:#bbb;font-size:12px;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+ 
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+ 
+  await transporter.sendMail({
+    from:    `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to:      userEmail,
+    subject: `📅 Meeting Confirmed — ${meetingDate} at ${meetingTime} | E-Notary`,
+    html:    message,
   });
 };
 module.exports = {
@@ -671,4 +824,5 @@ module.exports = {
   sendForgetPasswordOTP,
   sendBookingEmailToUser,
   sendBookingEmailToAdvocate,
+  sendMeetingConfirmationToUser
 };
