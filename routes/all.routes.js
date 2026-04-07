@@ -2,8 +2,17 @@ const express = require("express");
 const router = express.Router();
 const {
   sendOTP, verifyOTP, sendMobileOTP, verifyMobileOTP,
-  registerAdvocate, getAdvocateById, getPracticeAreas
+  registerAdvocate,  getPracticeAreas,getLoginAdvocate
 } = require("../controllers/advocate.controller");
+
+const {
+  createTemplate,
+  getTemplates,
+  getTemplateById,
+  editTemplate,
+  deleteTemplate,
+} = require("../controllers/Template.controller");
+
 const { login, sendForgetPasswordOtp, confirmPassword } = require("../controllers/Auth.controller");
 const {
   advocateUpload, userUpload,
@@ -46,6 +55,15 @@ router.post("/confirm-password", confirmPassword);
 // ─── Advocate ────────────────────────────────────────────
 router.post("/register", advocateUpload, handleUploadError, registerAdvocate);
 router.get("/advocates/practice-areas", getPracticeAreas);
+router.get("/advocate/me", advocateAuth, getLoginAdvocate);
+ 
+// ─── Template ─────────────────────────────────────────────
+
+router.post  ("/create/template",        advocateAuth, createTemplate);
+router.get   ("/templates",              advocateAuth, getTemplates);
+router.get   ("/template/:templateId",   advocateAuth, getTemplateById);
+router.put   ("/template/:templateId",   advocateAuth, editTemplate);
+router.delete("/template/:templateId",   advocateAuth, deleteTemplate);
 
 // ─── User ────────────────────────────────────────────────
 router.post("/user/verify-documents", userUpload, handleUploadError, UserverifyDocuments);
@@ -118,5 +136,4 @@ function isUserOrAdvocate(req, res, next) {
   }
 }
 
-router.get("/:id", getAdvocateById);
 module.exports = router;

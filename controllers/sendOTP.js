@@ -104,7 +104,7 @@ const sendOTPEmail = async (email, otp, purpose) => {
 // advocate: full Mongoose document
 // ═══════════════════════════════════════════════════════════
 const sendAdminNewAdvocateNotification = async (advocate) => {
-  const adminEmail = process.env.EMAIL_USER; // same email used for sending — your admin inbox
+  const adminEmail = process.env.ADMIN_EMAIL // same email used for sending — your admin inbox
 
   const dob = advocate.dateOfBirth
     ? new Date(advocate.dateOfBirth).toLocaleDateString("en-IN")

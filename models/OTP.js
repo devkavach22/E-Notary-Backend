@@ -4,54 +4,54 @@ const otpSchema = new mongoose.Schema(
   {
     // ─── Email ────────────────────────────────────────────
     email: {
-      type:      String,
-      required:  false,
+      type: String,
+      required: false,
       lowercase: true,
-      trim:      true,
+      trim: true,
     },
 
     // ─── Mobile number ────────────────────────────────────
     mobile: {
-      type:     String,
+      type: String,
       required: false,
-      trim:     true,
+      trim: true,
     },
 
     // ─── OTP code ─────────────────────────────────────────
     otp: {
-      type:     String,
+      type: String,
       required: true,
     },
 
     // ─── Purpose ──────────────────────────────────────────
     purpose: {
-      type:     String,
-      enum:     ["email_verify", "mobile_verify", "forget_password"], // ← added
+      type: String,
+      enum: ["email_verify", "mobile_verify", "forget_password"], // ← added
       required: true,
     },
 
     // ─── Role (forget_password ke liye) ───────────────────
     role: {
-      type:     String,
-      enum:     ["admin", "advocate", "user"],
+      type: String,
+      enum: ["admin", "advocate", "user"],
       required: false,
     },
 
     // ─── Login blocker flag ───────────────────────────────
     passwordResetPending: {
-      type:    Boolean,
+      type: Boolean,
       default: false,
     },
 
     // ─── Expiry ───────────────────────────────────────────
     expiresAt: {
-      type:    Date,
-      default: () => new Date(Date.now() + 10 * 60 * 1000),
+      type: Date,
+      default: () => new Date(Date.now() + 15 * 60 * 1000), // 10 → 15 min
     },
 
     // ─── Used flag ────────────────────────────────────────
     isUsed: {
-      type:    Boolean,
+      type: Boolean,
       default: false,
     },
   },

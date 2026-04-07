@@ -10,15 +10,14 @@ const fs   = require("fs");
 // BAR COUNCIL STATE CODE MAPPING
 // ═══════════════════════════════════════════════════════════
 const STATE_CODE_MAP = {
-  "D":  "Delhi",
-  "U":  "Uttar Pradesh",
-  "UP": "Uttar Pradesh",   // ← added: two-letter UP code
-  "B":  "Bihar",
-  "G":  "Gujarat",
-  "K":  "Karnataka",
-  "R":  "Rajasthan",
-  "O":  "Odisha",
-  "T":  "Telangana",
+  "DEL": "Delhi",
+  "UP": "Uttar Pradesh",
+  "BR": "Bihar",
+  "GJ": "Gujarat",
+  "KA": "Karnataka",
+  "RJ": "Rajasthan",
+  "OD": "Odisha",
+  "TS": "Telangana",
   "MH": "Maharashtra",
   "AP": "Andhra Pradesh",
   "MP": "Madhya Pradesh",
@@ -40,14 +39,8 @@ const STATE_CODE_MAP = {
   "TR": "Tripura",
   "SK": "Sikkim",
   "GA": "Goa",
-  "CH": "Chandigarh",
-  "DN": "Dadra and Nagar Haveli",
-  "DD": "Daman and Diu",
-  "LD": "Lakshadweep",
-  "PY": "Puducherry",
-  "AN": "Andaman and Nicobar",
   "AR": "Arunachal Pradesh",
-  "NE": "North East",
+  "NE": "North East"
 };
 
 const normalizeState = (str) =>
@@ -428,22 +421,25 @@ const verifyAdvocateDocuments = async (req, res) => {
     }
 
     // ── 2. PAN CARD OCR ─────────────────────────────────
-    console.log("\n========== ADMIN VERIFY — PAN OCR ==========");
-    try {
-      const panRaw  = await runOCR(advocate.documents.panCard);
-      const panFlat = cleanOCRText(panRaw);
-
-      const ocrPAN     = extractPAN(panFlat);
-      const panMatched = ocrPAN === advocate.panNumber?.toUpperCase();
-      console.log("OCR PAN:", ocrPAN, "| DB:", advocate.panNumber);
-      if (!ocrPAN)          mismatches.push("PAN number could not be read from PAN card image");
-      else if (!panMatched) mismatches.push(`PAN number mismatch — card: ${ocrPAN}, registered: ${advocate.panNumber}`);
-      results.panNumber = { ocr: ocrPAN, db: advocate.panNumber, matched: panMatched };
-
-    } catch (err) {
-      console.error("PAN OCR failed:", err.message);
-      mismatches.push("PAN card image could not be processed. Please ensure the image is clear.");
-    }
+    // NOTE: PAN card image OCR verification is temporarily disabled.
+    //       The code below is preserved for future re-enablement.
+    //
+    // console.log("\n========== ADMIN VERIFY — PAN OCR ==========");
+    // try {
+    //   const panRaw  = await runOCR(advocate.documents.panCard);
+    //   const panFlat = cleanOCRText(panRaw);
+    //
+    //   const ocrPAN     = extractPAN(panFlat);
+    //   const panMatched = ocrPAN === advocate.panNumber?.toUpperCase();
+    //   console.log("OCR PAN:", ocrPAN, "| DB:", advocate.panNumber);
+    //   if (!ocrPAN)          mismatches.push("PAN number could not be read from PAN card image");
+    //   else if (!panMatched) mismatches.push(`PAN number mismatch — card: ${ocrPAN}, registered: ${advocate.panNumber}`);
+    //   results.panNumber = { ocr: ocrPAN, db: advocate.panNumber, matched: panMatched };
+    //
+    // } catch (err) {
+    //   console.error("PAN OCR failed:", err.message);
+    //   mismatches.push("PAN card image could not be processed. Please ensure the image is clear.");
+    // }
 
     // ── 3. BAR COUNCIL — state check only (OCR match skipped) ──
     // We trust the registered Bar Council number and only verify

@@ -48,13 +48,13 @@ const login = async (req, res) => {
       });
     }
 
-    // ── 🔒 Block login if password reset is pending (DB se check) ──
+    // ── Password reset pending check ──
     const pendingReset = await OTP.findOne({
       email,
-      purpose:              "forget_password",
-      isUsed:               false,
+      purpose: "forget_password",
+      isUsed: false,
       passwordResetPending: true,
-      expiresAt:            { $gt: new Date() },
+      expiresAt: { $gt: new Date() },
     });
 
     if (pendingReset) {
@@ -98,12 +98,14 @@ const login = async (req, res) => {
       message: "Login successful",
       token,
       data: {
-        id:    user._id,
+        id: user._id,
         email: user.email,
         role,
+        // Advocate ke liye practiceAreas yahan add kiye hain
         ...(role === "advocate" && {
-          fullName:       user.fullName,
+          fullName: user.fullName,
           approvalStatus: user.approvalStatus,
+          practiceAreas: user.practiceAreas, // <--- Added this line
         }),
         ...(role === "user" && {
           fullName: user.fullName,
@@ -115,7 +117,6 @@ const login = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-
 
 // ─────────────────────────────────────────────────────────
 // @route   POST /api/send-forget-password-otp

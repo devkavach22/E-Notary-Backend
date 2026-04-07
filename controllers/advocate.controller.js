@@ -135,7 +135,22 @@ const sendOTP = async (req, res) => {
     const existing = await Advocate.findOne({ email });
     if (existing) return res.status(409).json({ success: false, message: "Email already registered" });
 
-    await OTP.deleteMany({ email, purpose: "email_verify" });
+    // ✅ Check karo — kya valid (unexpired, unused) OTP already exist karta hai?
+    const existingOTP = await OTP.findOne({
+      email,
+      purpose: "email_verify",
+      isUsed: false,
+      expiresAt: { $gt: new Date() }, // abhi bhi valid hai
+    });
+
+    if (existingOTP) {
+      // Purana OTP reuse karo — resend karo same OTP
+      await sendOTPEmail(email, existingOTP.otp, "email_verify");
+      return res.status(200).json({ success: true, message: "OTP resent successfully (previous OTP is still valid)" });
+    }
+
+    // Naya OTP banao — purana expire ho chuka hai ya exist nahi karta
+    await OTP.deleteMany({ email, purpose: "email_verify" }); // cleanup
     const otp = generateOTP();
     await OTP.create({ email, otp, purpose: "email_verify" });
     await sendOTPEmail(email, otp, "email_verify");
@@ -187,10 +202,30 @@ const sendMobileOTP = async (req, res) => {
     const mobileErr = validateMobile(mobile);
     if (mobileErr) return res.status(400).json({ success: false, message: mobileErr });
 
-    await OTP.deleteMany({ mobile, purpose: "mobile_verify" });
+    // ✅ Check karo — kya valid OTP already exist karta hai?
+    const existingOTP = await OTP.findOne({
+      mobile,
+      purpose: "mobile_verify",
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (existingOTP) {
+      // Reuse — same OTP dobara "send" karo (test mode mein sirf response mein dikhao)
+      return res.status(200).json({
+        success: true,
+        message: `OTP resent successfully (Test OTP: ${existingOTP.otp})`,
+      });
+    }
+
+    // Naya OTP banao
+    await OTP.deleteMany({ mobile, purpose: "mobile_verify" }); // cleanup
     await OTP.create({ mobile, otp: TEST_MOBILE_OTP, purpose: "mobile_verify" });
 
-    return res.status(200).json({ success: true, message: `OTP sent successfully (Test OTP: ${TEST_MOBILE_OTP})` });
+    return res.status(200).json({
+      success: true,
+      message: `OTP sent successfully (Test OTP: ${TEST_MOBILE_OTP})`,
+    });
   } catch (error) {
     console.error("sendMobileOTP Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
@@ -305,8 +340,8 @@ const registerAdvocate = async (req, res) => {
       return res.status(400).json({ success: false, message: "Mobile is not verified. Please verify your mobile first" });
 
     const parsedPracticeAreas = typeof practiceAreas === "string" ? JSON.parse(practiceAreas) : practiceAreas;
-    const parsedLanguages     = typeof languagesKnown === "string" ? JSON.parse(languagesKnown) : languagesKnown;
-    const parsedAvailableDays = typeof availableDays  === "string" ? JSON.parse(availableDays)  : availableDays;
+    const parsedLanguages = typeof languagesKnown === "string" ? JSON.parse(languagesKnown) : languagesKnown;
+    const parsedAvailableDays = typeof availableDays === "string" ? JSON.parse(availableDays) : availableDays;
 
     // ── Validate practice areas against master list ──────
     const invalidAreas = parsedPracticeAreas.filter((area) => !PRACTICE_AREAS.includes(area));
@@ -333,9 +368,9 @@ const registerAdvocate = async (req, res) => {
       aadhaarNumber,
       panNumber: panNumber.toUpperCase(),
       documents: {
-        aadhaarFront:          files.aadhaarFront[0].path,
-        aadhaarBack:           files.aadhaarBack[0].path,
-        panCard:               files.panCard[0].path,
+        aadhaarFront: files.aadhaarFront[0].path,
+        aadhaarBack: files.aadhaarBack[0].path,
+        panCard: files.panCard[0].path,
         barCouncilCertificate: files.barCouncilCertificate[0].path,
       },
       bankDetails: {
@@ -348,11 +383,11 @@ const registerAdvocate = async (req, res) => {
       availableDays: parsedAvailableDays,
       availableHours: { from: availableFrom, to: availableTo },
       perDocumentFee,
-      isEmailVerified:  true,
+      isEmailVerified: true,
       isMobileVerified: true,
-      documentStatus:   "pending_review",
-      approvalStatus:   "pending",
-      isActive:         false,
+      documentStatus: "pending_review",
+      approvalStatus: "pending",
+      isActive: false,
     });
 
     // ── Notify admin about new advocate registration ─────
@@ -366,10 +401,10 @@ const registerAdvocate = async (req, res) => {
       success: true,
       message: "Registration successful! Your documents are under review. You will be notified once approved.",
       data: {
-        id:             advocate._id,
-        fullName:       advocate.fullName,
-        email:          advocate.email,
-        role:           advocate.role,
+        id: advocate._id,
+        fullName: advocate.fullName,
+        email: advocate.email,
+        role: advocate.role,
         documentStatus: advocate.documentStatus,
         approvalStatus: advocate.approvalStatus,
       },
@@ -397,23 +432,24 @@ const registerAdvocate = async (req, res) => {
 const getPracticeAreas = async (req, res) => {
   return res.status(200).json({
     success: true,
-    total:   PRACTICE_AREAS.length,
-    data:    PRACTICE_AREAS,
+    total: PRACTICE_AREAS.length,
+    data: PRACTICE_AREAS,
   });
 };
 
 // ═══════════════════════════════════════════════════════════
 // @route  GET /api/advocates/:id
 // ═══════════════════════════════════════════════════════════
-const getAdvocateById = async (req, res) => {
+const getLoginAdvocate = async (req, res) => {
   try {
-    const advocate = await Advocate.findById(req.params.id).select("-password");
-    if (!advocate) return res.status(404).json({ success: false, message: "Advocate not found" });
+    // req.advocate is set by your auth middleware
+    const advocate = await Advocate.findById(req.advocate._id).select("-password");
+    if (!advocate)
+      return res.status(404).json({ success: false, message: "Advocate not found" });
+
     return res.status(200).json({ success: true, data: advocate });
   } catch (error) {
-    console.error("getAdvocateById Error:", error);
-    if (error.name === "CastError" && error.kind === "ObjectId")
-      return res.status(404).json({ success: false, message: "Advocate not found" });
+    console.error("getMe Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -425,5 +461,4 @@ module.exports = {
   verifyMobileOTP,
   registerAdvocate,
   getPracticeAreas,
-  getAdvocateById,
-};
+getLoginAdvocate};
