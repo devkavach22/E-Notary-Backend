@@ -1,24 +1,23 @@
-const User      = require("../models/User");
-const Advocate  = require("../models/Advocate");
-const mongoose  = require("mongoose");
-const Template  = require("../models/Template");
+const User = require("../models/User");
+const Advocate = require("../models/Advocate");
+const mongoose = require("mongoose");
+const Template = require("../models/Template");
 const UserFilledTemplate = require("../models/UserFilledTemplate"); // ✅ added
-const OTP       = require("../models/OTP");
+const OTP = require("../models/OTP");
 const Tesseract = require("tesseract.js");
 const { createCanvas, loadImage } = require("canvas");
-const path      = require("path");
-const fs        = require("fs");
+const path = require("path");
+const fs = require("fs");
+const PDFDocument = require("pdfkit");
 
-// ═══════════════════════════════════════════════════════════
-// OCR HELPERS
-// ═══════════════════════════════════════════════════════════
+
 const cleanOCRText = (text) => text.toUpperCase().replace(/\s+/g, " ").trim();
 
 const extractTextOriginal = async (filePath) => {
   try {
     const abs = path.resolve(filePath);
     if (!fs.existsSync(abs)) throw new Error(`File not found: ${abs}`);
-    const result = await Tesseract.recognize(abs, "eng+hin", { logger: () => {} });
+    const result = await Tesseract.recognize(abs, "eng+hin", { logger: () => { } });
     return result.data.text.toUpperCase();
   } catch (e) {
     console.error("OCR Original Error:", e.message);
@@ -28,15 +27,15 @@ const extractTextOriginal = async (filePath) => {
 
 const extractTextCanvas = async (filePath) => {
   try {
-    const abs  = path.resolve(filePath);
-    const out  = abs.replace(/(\.\w+)$/, "_canvas.png");
-    const img  = await loadImage(abs);
-    const sc   = 2400 / img.width;
-    const cv   = createCanvas(img.width * sc, img.height * sc);
-    const ctx  = cv.getContext("2d");
+    const abs = path.resolve(filePath);
+    const out = abs.replace(/(\.\w+)$/, "_canvas.png");
+    const img = await loadImage(abs);
+    const sc = 2400 / img.width;
+    const cv = createCanvas(img.width * sc, img.height * sc);
+    const ctx = cv.getContext("2d");
     ctx.drawImage(img, 0, 0, cv.width, cv.height);
-    const id   = ctx.getImageData(0, 0, cv.width, cv.height);
-    const d    = id.data;
+    const id = ctx.getImageData(0, 0, cv.width, cv.height);
+    const d = id.data;
     for (let i = 0; i < d.length; i += 4) {
       const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
       const c = Math.min(255, Math.max(0, 2.0 * (g - 128) + 128));
@@ -44,7 +43,7 @@ const extractTextCanvas = async (filePath) => {
     }
     ctx.putImageData(id, 0, 0);
     fs.writeFileSync(out, cv.toBuffer("image/png"));
-    const r = await Tesseract.recognize(out, "eng+hin", { logger: () => {}, tessedit_pageseg_mode: 6 });
+    const r = await Tesseract.recognize(out, "eng+hin", { logger: () => { }, tessedit_pageseg_mode: 6 });
     if (fs.existsSync(out)) fs.unlinkSync(out);
     return r.data.text.toUpperCase();
   } catch (e) { console.error("OCR Canvas Error:", e.message); return ""; }
@@ -52,22 +51,22 @@ const extractTextCanvas = async (filePath) => {
 
 const extractTextCanvasBW = async (filePath) => {
   try {
-    const abs  = path.resolve(filePath);
-    const out  = abs.replace(/(\.\w+)$/, "_canvasbw.png");
-    const img  = await loadImage(abs);
-    const sc   = 2400 / img.width;
-    const cv   = createCanvas(img.width * sc, img.height * sc);
-    const ctx  = cv.getContext("2d");
+    const abs = path.resolve(filePath);
+    const out = abs.replace(/(\.\w+)$/, "_canvasbw.png");
+    const img = await loadImage(abs);
+    const sc = 2400 / img.width;
+    const cv = createCanvas(img.width * sc, img.height * sc);
+    const ctx = cv.getContext("2d");
     ctx.drawImage(img, 0, 0, cv.width, cv.height);
-    const id   = ctx.getImageData(0, 0, cv.width, cv.height);
-    const d    = id.data;
+    const id = ctx.getImageData(0, 0, cv.width, cv.height);
+    const d = id.data;
     for (let i = 0; i < d.length; i += 4) {
       const bw = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) > 140 ? 255 : 0;
       d[i] = d[i + 1] = d[i + 2] = bw;
     }
     ctx.putImageData(id, 0, 0);
     fs.writeFileSync(out, cv.toBuffer("image/png"));
-    const r = await Tesseract.recognize(out, "eng+hin", { logger: () => {}, tessedit_pageseg_mode: 4 });
+    const r = await Tesseract.recognize(out, "eng+hin", { logger: () => { }, tessedit_pageseg_mode: 4 });
     if (fs.existsSync(out)) fs.unlinkSync(out);
     return r.data.text.toUpperCase();
   } catch (e) { console.error("OCR Canvas BW Error:", e.message); return ""; }
@@ -75,48 +74,46 @@ const extractTextCanvasBW = async (filePath) => {
 
 const extractTextCanvasSharpen = async (filePath) => {
   try {
-    const abs    = path.resolve(filePath);
-    const out    = abs.replace(/(\.\w+)$/, "_canvassharp.png");
-    const img    = await loadImage(abs);
-    const sc     = 2400 / img.width;
-    const cv     = createCanvas(img.width * sc, img.height * sc);
-    const ctx    = cv.getContext("2d");
+    const abs = path.resolve(filePath);
+    const out = abs.replace(/(\.\w+)$/, "_canvassharp.png");
+    const img = await loadImage(abs);
+    const sc = 2400 / img.width;
+    const cv = createCanvas(img.width * sc, img.height * sc);
+    const ctx = cv.getContext("2d");
     ctx.drawImage(img, 0, 0, cv.width, cv.height);
-    const id     = ctx.getImageData(0, 0, cv.width, cv.height);
-    const d      = id.data;
-    const W      = cv.width;
-    const H      = cv.height;
+    const id = ctx.getImageData(0, 0, cv.width, cv.height);
+    const d = id.data;
+    const W = cv.width;
+    const H = cv.height;
     const output = new Uint8ClampedArray(d);
-    const K      = [0, -1, 0, -1, 5, -1, 0, -1, 0];
+    const K = [0, -1, 0, -1, 5, -1, 0, -1, 0];
     for (let y = 1; y < H - 1; y++) {
       for (let x = 1; x < W - 1; x++) {
         let r = 0, g = 0, b = 0;
         for (let ky = -1; ky <= 1; ky++) {
           for (let kx = -1; kx <= 1; kx++) {
             const idx = ((y + ky) * W + (x + kx)) * 4;
-            const k   = K[(ky + 1) * 3 + (kx + 1)];
+            const k = K[(ky + 1) * 3 + (kx + 1)];
             r += d[idx] * k; g += d[idx + 1] * k; b += d[idx + 2] * k;
           }
         }
-        const i    = (y * W + x) * 4;
+        const i = (y * W + x) * 4;
         const gray = 0.299 * Math.min(255, Math.max(0, r))
-                   + 0.587 * Math.min(255, Math.max(0, g))
-                   + 0.114 * Math.min(255, Math.max(0, b));
+          + 0.587 * Math.min(255, Math.max(0, g))
+          + 0.114 * Math.min(255, Math.max(0, b));
         output[i] = output[i + 1] = output[i + 2] = gray;
         output[i + 3] = 255;
       }
     }
     ctx.putImageData(new (require("canvas").ImageData)(output, W, H), 0, 0);
     fs.writeFileSync(out, cv.toBuffer("image/png"));
-    const r = await Tesseract.recognize(out, "eng+hin", { logger: () => {}, tessedit_pageseg_mode: 6 });
+    const r = await Tesseract.recognize(out, "eng+hin", { logger: () => { }, tessedit_pageseg_mode: 6 });
     if (fs.existsSync(out)) fs.unlinkSync(out);
     return r.data.text.toUpperCase();
   } catch (e) { console.error("OCR Sharpen Error:", e.message); return ""; }
 };
 
-// ═══════════════════════════════════════════════════════════
-// MISC HELPERS
-// ═══════════════════════════════════════════════════════════
+
 const parseDOB = (dobInput) => {
   if (!dobInput) return null;
   const str = String(dobInput).trim();
@@ -185,37 +182,32 @@ const extractNameByFrequency = (rawText, label = "") => {
 // INPUT VALIDATORS
 // ═══════════════════════════════════════════════════════════
 const validateEmail = (email) => {
-  if (!email)                         return "Email is required";
-  if (email.length > 30)              return "Email must not exceed 30 characters";
+  if (!email) return "Email is required";
+  if (email.length > 30) return "Email must not exceed 30 characters";
   if (!/^\S+@\S+\.\S+$/.test(email)) return "Invalid email address";
   return null;
 };
 
 const validatePassword = (password) => {
-  if (!password)             return "Password is required";
-  if (password.length < 8)  return "Password must be at least 8 characters";
+  if (!password) return "Password is required";
+  if (password.length < 8) return "Password must be at least 8 characters";
   if (password.length > 28) return "Password must not exceed 28 characters";
   return null;
 };
 
-// ═══════════════════════════════════════════════════════════
-// TEMPLATE FIELD HELPER
-// ═══════════════════════════════════════════════════════════
 const cleanFieldsForResponse = (fields) =>
   fields.map((f) => {
     const field = {
-      fieldName:   f.fieldName,
-      fieldType:   f.fieldType,
-      required:    f.required,
+      fieldName: f.fieldName,
+      fieldType: f.fieldType,
+      required: f.required,
       placeholder: f.placeholder,
     };
     if (f.fieldType === "dropdown") field.options = f.options;
     return field;
   });
 
-// ═══════════════════════════════════════════════════════════
-// SEND EMAIL OTP  (User)
-// ═══════════════════════════════════════════════════════════
+
 const { generateOTP, sendOTPEmail } = require("./sendOTP");
 
 const sendOTP = async (req, res) => {
@@ -225,15 +217,15 @@ const sendOTP = async (req, res) => {
     const emailErr = validateEmail(email);
     if (emailErr) return res.status(400).json({ success: false, message: emailErr });
 
-    const inUser     = await User.findOne({ email });
+    const inUser = await User.findOne({ email });
     const inAdvocate = await Advocate.findOne({ email });
     if (inUser && inAdvocate)
       return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
 
     const existingOTP = await OTP.findOne({
       email,
-      purpose:   "email_verify",
-      isUsed:    false,
+      purpose: "email_verify",
+      isUsed: false,
       expiresAt: { $gt: new Date() },
     });
 
@@ -254,9 +246,7 @@ const sendOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// VERIFY EMAIL OTP  (User)
-// ═══════════════════════════════════════════════════════════
+
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -282,9 +272,7 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// SEND MOBILE OTP  (User — hardcoded test OTP)
-// ═══════════════════════════════════════════════════════════
+
 const TEST_MOBILE_OTP = "872356";
 
 const sendMobileOTP = async (req, res) => {
@@ -297,14 +285,14 @@ const sendMobileOTP = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid mobile number format" });
 
     const mobileInUser = await User.findOne({ mobile });
-    const mobileInAdv  = await Advocate.findOne({ mobile });
+    const mobileInAdv = await Advocate.findOne({ mobile });
     if (mobileInUser && mobileInAdv)
       return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
 
     const existingOTP = await OTP.findOne({
       mobile,
-      purpose:   "mobile_verify",
-      isUsed:    false,
+      purpose: "mobile_verify",
+      isUsed: false,
       expiresAt: { $gt: new Date() },
     });
 
@@ -328,9 +316,7 @@ const sendMobileOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// VERIFY MOBILE OTP  (User)
-// ═══════════════════════════════════════════════════════════
+
 const verifyMobileOTP = async (req, res) => {
   try {
     const { mobile, otp } = req.body;
@@ -357,9 +343,7 @@ const verifyMobileOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// UserverifyDocuments
-// ═══════════════════════════════════════════════════════════
+
 const UserverifyDocuments = async (req, res) => {
   try {
     const files = req.files;
@@ -372,11 +356,11 @@ const UserverifyDocuments = async (req, res) => {
     }
 
     let extractedData = {
-      fullName:      null,
-      dateOfBirth:   null,
-      gender:        null,
+      fullName: null,
+      dateOfBirth: null,
+      gender: null,
       aadhaarNumber: null,
-      panNumber:     null,
+      panNumber: null,
     };
 
     try {
@@ -385,7 +369,7 @@ const UserverifyDocuments = async (req, res) => {
       const p3 = await extractTextCanvasBW(files.aadhaarFront[0].path);
       const p4 = await extractTextCanvasSharpen(files.aadhaarFront[0].path);
 
-      const aadhaarRaw  = [p1, p2, p3, p4].join("\n");
+      const aadhaarRaw = [p1, p2, p3, p4].join("\n");
       const aadhaarFlat = cleanOCRText(aadhaarRaw);
 
       console.log("\n========== AADHAAR OCR ==========");
@@ -421,7 +405,7 @@ const UserverifyDocuments = async (req, res) => {
         if (m) {
           let dob = (m[1] || m[0]).trim();
           if (/^\d{4}\/\d{4}$/.test(dob)) dob = dob.slice(0, 2) + "/" + dob.slice(2, 4) + "/" + dob.slice(5);
-          if (/^\d{8}$/.test(dob))         dob = dob.slice(0, 2) + "/" + dob.slice(2, 4) + "/" + dob.slice(4);
+          if (/^\d{8}$/.test(dob)) dob = dob.slice(0, 2) + "/" + dob.slice(2, 4) + "/" + dob.slice(4);
           extractedData.dateOfBirth = dob.replace(/[-\.]/g, "/").replace(/\s/g, "/");
           console.log("✅ DOB (Aadhaar):", extractedData.dateOfBirth);
           break;
@@ -493,15 +477,15 @@ const UserverifyDocuments = async (req, res) => {
       message: "Documents uploaded successfully",
       extractedData,
       autoFilled: {
-        fullName:      !!extractedData.fullName,
-        dateOfBirth:   !!extractedData.dateOfBirth,
-        gender:        !!extractedData.gender,
+        fullName: !!extractedData.fullName,
+        dateOfBirth: !!extractedData.dateOfBirth,
+        gender: !!extractedData.gender,
         aadhaarNumber: !!extractedData.aadhaarNumber,
-        panNumber:     !!extractedData.panNumber,
+        panNumber: !!extractedData.panNumber,
       },
       filePaths: {
         aadhaarFront: files.aadhaarFront[0].path,
-        panCard:      files.panCard[0].path,
+        panCard: files.panCard[0].path,
       },
     });
 
@@ -511,9 +495,6 @@ const UserverifyDocuments = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// REGISTER USER
-// ═══════════════════════════════════════════════════════════
 const registerUser = async (req, res) => {
   try {
     const {
@@ -526,9 +507,9 @@ const registerUser = async (req, res) => {
     } = req.body;
 
     if (!email || !mobile || !password || !fullName || !dateOfBirth ||
-        !aadhaarNumber || !panNumber || !address ||
-        !city || !state || !pincode ||
-        !aadhaarFrontPath || !panCardPath) {
+      !aadhaarNumber || !panNumber || !address ||
+      !city || !state || !pincode ||
+      !aadhaarFrontPath || !panCardPath) {
       return res.status(400).json({ success: false, message: "All fields are required" });
     }
 
@@ -551,12 +532,12 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid pincode" });
 
     const emailInUser = await User.findOne({ email });
-    const emailInAdv  = await Advocate.findOne({ email });
+    const emailInAdv = await Advocate.findOne({ email });
     if (emailInUser && emailInAdv)
       return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
 
     const mobileInUser = await User.findOne({ mobile });
-    const mobileInAdv  = await Advocate.findOne({ mobile });
+    const mobileInAdv = await Advocate.findOne({ mobile });
     if (mobileInUser && mobileInAdv)
       return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
 
@@ -581,19 +562,19 @@ const registerUser = async (req, res) => {
     const user = await User.create({
       email, mobile, password, fullName,
       dateOfBirth: parsedDOB,
-      gender:      gender || null,
+      gender: gender || null,
       aadhaarNumber,
-      panNumber:   panNumber.toUpperCase(),
+      panNumber: panNumber.toUpperCase(),
       address, city, state, pincode,
       documents: {
         aadhaarFront: aadhaarFrontPath,
-        panCard:      panCardPath,
+        panCard: panCardPath,
       },
-      isEmailVerified:  true,
+      isEmailVerified: true,
       isMobileVerified: true,
       verificationChecks: {
         aadhaarVerified: true,
-        panVerified:     true,
+        panVerified: true,
       },
     });
 
@@ -601,10 +582,10 @@ const registerUser = async (req, res) => {
       success: true,
       message: "User registered successfully.",
       data: {
-        id:       user._id,
+        id: user._id,
         fullName: user.fullName,
-        email:    user.email,
-        role:     user.role,
+        email: user.email,
+        role: user.role,
       },
     });
 
@@ -619,10 +600,10 @@ const registerUser = async (req, res) => {
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
       const fieldLabels = {
-        email:         "Email",
-        mobile:        "Mobile number",
+        email: "Email",
+        mobile: "Mobile number",
         aadhaarNumber: "Aadhaar number",
-        panNumber:     "PAN number",
+        panNumber: "PAN number",
       };
       const label = fieldLabels[field] || field;
       return res.status(409).json({ success: false, message: `${label} is already registered` });
@@ -631,10 +612,6 @@ const registerUser = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-
-// ═══════════════════════════════════════════════════════════
-// GET USER BY ID
-// ═══════════════════════════════════════════════════════════
 const getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select("-password");
@@ -654,9 +631,7 @@ const getUserById = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// GET ADVOCATES FOR USER
-// ═══════════════════════════════════════════════════════════
+
 const getAdvocatesForUser = async (req, res) => {
   try {
     const { caseType, category } = req.query;
@@ -704,7 +679,7 @@ const getAdvocatesForUser = async (req, res) => {
         ...(category && category.trim().toLowerCase() !== "all" && { category: category.trim() }),
       },
       total: advocates.length,
-      data:  advocates,
+      data: advocates,
     });
 
   } catch (error) {
@@ -713,9 +688,7 @@ const getAdvocatesForUser = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// GET TEMPLATES FOR USER
-// ═══════════════════════════════════════════════════════════
+
 const getTemplatesForUser = async (req, res) => {
   try {
     const { advocateId } = req.params;
@@ -725,9 +698,9 @@ const getTemplatesForUser = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid advocate ID" });
 
     const advocate = await Advocate.findOne({
-      _id:            advocateId,
+      _id: advocateId,
       approvalStatus: "approved",
-      isActive:       true,
+      isActive: true,
     }).select("fullName");
 
     if (!advocate)
@@ -742,7 +715,7 @@ const getTemplatesForUser = async (req, res) => {
 
     const filter = { advocateId, isActive: true };
     if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
-    if (category?.trim())     filter.category     = category.trim();
+    if (category?.trim()) filter.category = category.trim();
 
     const templates = await Template.find(filter)
       .sort({ createdAt: -1 })
@@ -752,11 +725,11 @@ const getTemplatesForUser = async (req, res) => {
       return res.status(404).json({ success: false, message: "No templates found" });
 
     return res.status(200).json({
-      success:      true,
+      success: true,
       advocateName: advocate.fullName,
       filterApplied: {
         ...(practiceArea?.trim() && { practiceArea: practiceArea.trim() }),
-        ...(category?.trim()     && { category:     category.trim()     }),
+        ...(category?.trim() && { category: category.trim() }),
       },
       totalTemplates: templates.length,
       userData: user,
@@ -771,32 +744,23 @@ const getTemplatesForUser = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// FILL TEMPLATE  (User)                                    ✅
-// ═══════════════════════════════════════════════════════════
 const fillTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
     const { filledFields } = req.body;
-
-    // ── Validate ID ──────────────────────────────────────
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
 
-    // ── User token se auto ───────────────────────────────
     if (!req.user?._id)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    // ── Fetch template ───────────────────────────────────
     const template = await Template.findOne({ _id: templateId, isActive: true });
     if (!template)
       return res.status(404).json({ success: false, message: "Template not found or inactive" });
 
-    // ── Validate filledFields ────────────────────────────
     if (!Array.isArray(filledFields) || filledFields.length === 0)
       return res.status(400).json({ success: false, message: "filledFields are required" });
 
-    // ── Check required fields ────────────────────────────
     const missingFields = [];
 
     for (const templateField of template.fields) {
@@ -820,7 +784,6 @@ const fillTemplate = async (req, res) => {
         message: `Required fields missing: ${missingFields.join(", ")}`,
       });
 
-    // ── Build enrichedFields ─────────────────────────────
     const enrichedFields = filledFields.map((userField) => {
       const templateField = template.fields.find(
         (f) => f.fieldName.trim().toLowerCase() === userField.fieldName.trim().toLowerCase()
@@ -828,26 +791,25 @@ const fillTemplate = async (req, res) => {
       return {
         fieldName: userField.fieldName.trim(),
         fieldType: templateField?.fieldType || "text",
-        value:     userField.value,
+        value: userField.value,
       };
     });
 
-    // ── Save ─────────────────────────────────────────────
     const filledTemplate = await UserFilledTemplate.create({
-      templateId:   template._id,
-      advocateId:   template.advocateId,  // ✅ template se auto
-      userId:       req.user._id,         // ✅ token se auto
-      title:        template.title,
+      templateId: template._id,
+      advocateId: template.advocateId,
+      userId: req.user._id,
+      title: template.title,
       practiceArea: template.practiceArea,
-      category:     template.category,
+      category: template.category,
       filledFields: enrichedFields,
-      status:       "submitted",
+      status: "submitted",
     });
 
     return res.status(201).json({
       success: true,
       message: "Template submitted successfully",
-      data:    filledTemplate,
+      data: filledTemplate,
     });
   } catch (error) {
     console.error("fillTemplate Error:", error);
@@ -855,9 +817,163 @@ const fillTemplate = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// EXPORTS
-// ═══════════════════════════════════════════════════════════
+const downloadFilledTemplate = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(submissionId))
+      return res.status(400).json({ success: false, message: "Invalid submission ID" });
+
+    const submission = await UserFilledTemplate.findOne({
+      _id:    submissionId,
+      userId: req.user._id,
+    })
+      .populate("userId",     "fullName email mobile")
+      .populate("templateId", "title practiceArea category");
+
+    if (!submission)
+      return res.status(404).json({ success: false, message: "Submission not found" });
+
+    const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="submission_${submissionId}.pdf"`);
+    doc.pipe(res);
+
+    const DARK_BLUE  = "#1a3c5e";
+    const WHITE      = "#ffffff";
+    const LIGHT_GRAY = "#f5f7fa";
+    const BORDER     = "#e0e4ea";
+    const TEXT_DARK  = "#1a1a2e";
+    const TEXT_MUTED = "#6b7280";
+    const GREEN_BG   = "#e1f5ee";
+    const GREEN_TEXT = "#0f6e56";
+
+    const pageW = doc.page.width;
+    const margin = 50;
+    const contentW = pageW - margin * 2;
+
+    // ── Header background ────────────────────────────────
+    doc.rect(0, 0, pageW, 110).fill(DARK_BLUE);
+
+    // ── Title ────────────────────────────────────────────
+    doc
+      .fontSize(20).font("Helvetica-Bold").fillColor(WHITE)
+      .text(submission.title || "Filled Template", margin, 28, { align: "center", width: contentW });
+
+    // ── Badges ───────────────────────────────────────────
+    const badgeY = 62;
+    const badge1 = `Practice Area : ${submission.practiceArea}`;
+    const badge2 = `Category : ${submission.category}`;
+
+    doc.fontSize(10).font("Helvetica");
+    const b1W = doc.widthOfString(badge1) + 20;
+    const b2W = doc.widthOfString(badge2) + 20;
+    const totalBadgeW = b1W + b2W + 10;
+    const badgeStartX = (pageW - totalBadgeW) / 2;
+
+    doc.roundedRect(badgeStartX,          badgeY, b1W, 18, 9).fillOpacity(0.15).fill(WHITE);
+    doc.roundedRect(badgeStartX + b1W + 10, badgeY, b2W, 18, 9).fillOpacity(0.1).fill(WHITE);
+    doc.fillOpacity(1);
+
+    doc.fillColor("#e8f4ff").text(badge1, badgeStartX + 10,          badgeY + 4, { lineBreak: false });
+    doc.fillColor("#c8e0f8").text(badge2, badgeStartX + b1W + 20,    badgeY + 4, { lineBreak: false });
+
+    // ── User card ────────────────────────────────────────
+    const cardY = 125;
+    doc.rect(margin, cardY, contentW, 72).fill(LIGHT_GRAY);
+    doc.rect(margin, cardY, contentW, 72).stroke(BORDER);
+
+    // Avatar circle
+    const avatarX = margin + 16;
+    const avatarY = cardY + 36;
+    const user = submission.userId;
+    const initials = (user?.fullName || "?")
+      .split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
+
+    doc.circle(avatarX + 20, avatarY, 20).fill(DARK_BLUE);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor(WHITE)
+      .text(initials, avatarX + 5, avatarY - 7, { width: 30, align: "center", lineBreak: false });
+
+    // User info
+    const infoX = avatarX + 50;
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(TEXT_DARK)
+      .text(user?.fullName || "N/A", infoX, cardY + 14, { lineBreak: false });
+
+    doc.fontSize(10).font("Helvetica").fillColor(TEXT_MUTED);
+    doc.text(`Email: `, infoX, cardY + 33, { continued: true, lineBreak: false });
+    doc.fillColor(TEXT_DARK).text(user?.email || "N/A", { continued: false, lineBreak: false });
+
+    doc.fillColor(TEXT_MUTED).text(`Mobile: `, infoX + 200, cardY + 33, { continued: true, lineBreak: false });
+    doc.fillColor(TEXT_DARK).text(user?.mobile || "N/A", { continued: false, lineBreak: false });
+
+    doc.fillColor(TEXT_MUTED).text(`Date: `, infoX, cardY + 50, { continued: true, lineBreak: false });
+    doc.fillColor(TEXT_DARK).text(
+      new Date(submission.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
+      { continued: false, lineBreak: false }
+    );
+
+    // ── Section label ─────────────────────────────────────
+    let currentY = cardY + 90;
+    doc.fontSize(9).font("Helvetica-Bold").fillColor(TEXT_MUTED)
+      .text("FILLED DETAILS", margin, currentY);
+
+    currentY += 16;
+
+    // ── Fields ───────────────────────────────────────────
+    submission.filledFields.forEach((field) => {
+      const labelW = 170;
+      const valueW = contentW - labelW;
+      const rowH   = 28;
+
+      // Label cell (dark blue)
+      doc.rect(margin, currentY, labelW, rowH).fill(DARK_BLUE);
+      doc.fontSize(10).font("Helvetica-Bold").fillColor(WHITE)
+        .text(field.fieldName, margin + 10, currentY + 9, {
+          width: labelW - 16, lineBreak: false, ellipsis: true,
+        });
+
+      // Value cell
+      doc.rect(margin + labelW, currentY, valueW, rowH)
+        .fill(WHITE).stroke(BORDER);
+
+      const val = (field.value === null || field.value === undefined || String(field.value).trim() === "")
+        ? "—" : String(field.value);
+
+      doc.fontSize(10).font("Helvetica").fillColor(val === "—" ? TEXT_MUTED : TEXT_DARK)
+        .text(val, margin + labelW + 10, currentY + 9, {
+          width: valueW - 16, lineBreak: false, ellipsis: true,
+        });
+
+      currentY += rowH + 4;
+    });
+
+    // ── Footer ────────────────────────────────────────────
+    currentY += 16;
+    doc.moveTo(margin, currentY).lineTo(pageW - margin, currentY)
+      .strokeColor(BORDER).lineWidth(0.5).stroke();
+
+    currentY += 10;
+
+    // Status badge
+    doc.roundedRect(margin, currentY, 70, 16, 8).fill(GREEN_BG);
+    doc.fontSize(9).font("Helvetica-Bold").fillColor(GREEN_TEXT)
+      .text("Submitted", margin + 8, currentY + 4, { lineBreak: false });
+
+    doc.fontSize(9).font("Helvetica").fillColor(TEXT_MUTED)
+      .text(`ID: ${submissionId}`, margin + 80, currentY + 4, { lineBreak: false });
+
+    doc.text("System generated document", 0, currentY + 4, {
+      align: "right", width: pageW - margin, lineBreak: false,
+    });
+
+    doc.end();
+
+  } catch (error) {
+    console.error("downloadFilledTemplate Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
 module.exports = {
   sendOTP,
   verifyOTP,
@@ -868,5 +984,6 @@ module.exports = {
   getUserById,
   getAdvocatesForUser,
   getTemplatesForUser,
-  fillTemplate,           // ✅ added
+  fillTemplate,
+  downloadFilledTemplate
 };
