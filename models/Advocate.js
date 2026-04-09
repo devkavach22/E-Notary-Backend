@@ -20,7 +20,7 @@ const advocateSchema = new mongoose.Schema(
     password: {
       type: String, required: [true, "Password is required"],
       minlength: [8, "Password must be at least 8 characters"],
-      maxlength: [128, "Password too long"],  
+      maxlength: [128, "Password too long"],
       select: false,
     },
 
@@ -41,6 +41,7 @@ const advocateSchema = new mongoose.Schema(
 
     // ─── NO enum restriction — frontend se jo bhi aaye accept karo ──
     practiceAreas:  { type: [String], required: [true, "At least one practice area is required"] },
+    categories:     { type: [String], default: [] }, // ✅ auto-derived from practiceAreas
     languagesKnown: { type: [String], required: [true, "At least one language is required"] },
 
     // ─── Address Details ─────────────────────────────────

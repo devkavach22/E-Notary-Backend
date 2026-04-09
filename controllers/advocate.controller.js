@@ -33,61 +33,95 @@ const validateBarCouncilNumber = (bcn) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// PRACTICE AREAS MASTER LIST  (37 areas)
+// PRACTICE AREAS — GROUPED MASTER LIST
 // ═══════════════════════════════════════════════════════════
-const PRACTICE_AREAS = [
-  // Family & Personal
-  "Divorce & Family Law",
-  "Domestic Violence",
-  "Child Custody & Adoption",
-  "Matrimonial Disputes",
-  "Maintenance & Alimony",
-
-  // Property & Real Estate
-  "Property & Real Estate",
-  "Land Acquisition",
-  "Rent & Tenancy",
-  "Construction Disputes",
-
-  // Criminal
-  "Criminal Defense",
-  "Bail & Anticipatory Bail",
-  "Cyber Crime",
-  "Cheque Bounce",
-  "POCSO & Child Protection",
-
-  // Civil & Corporate
-  "Civil Litigation",
-  "Corporate & Business Law",
-  "Contract Disputes",
-  "Partnership & Startup Law",
-  "Mergers & Acquisitions",
-
-  // Finance & Tax
-  "Banking & Finance",
-  "Tax Law",
-  "GST & Indirect Tax",
-  "Debt Recovery & Insolvency",
-
-  // Employment & Labour
-  "Labour & Employment",
-  "Wrongful Termination",
-  "PF & ESI Disputes",
-
-  // Consumer & Rights
-  "Consumer Protection",
-  "RTI & Public Interest",
-  "Human Rights",
-
-  // Specialized
-  "Intellectual Property",
-  "Immigration",
-  "Motor Accident Claims",
-  "Medical Negligence",
-  "Insurance Disputes",
-  "Environmental Law",
-  "Arbitration & Mediation",
+const PRACTICE_AREAS_GROUPED = [
+  {
+    group: "Civil & Family",
+    areas: [
+      "Civil Litigation",
+      "Contract Disputes",
+      "Divorce & Family Law",
+      "Domestic Violence",
+      "Child Custody & Adoption",
+      "Matrimonial Disputes",
+      "Maintenance & Alimony",
+    ],
+  },
+  {
+    group: "Property & Real Estate",
+    areas: [
+      "Property & Real Estate",
+      "Land Acquisition",
+      "Rent & Tenancy",
+      "Construction Disputes",
+    ],
+  },
+  {
+    group: "Criminal",
+    areas: [
+      "Criminal Defense",
+      "Bail & Anticipatory Bail",
+      "Cyber Crime",
+      "Cheque Bounce",
+      "POCSO & Child Protection",
+    ],
+  },
+  {
+    group: "Corporate & Business",
+    areas: [
+      "Corporate & Business Law",
+      "Partnership & Startup Law",
+      "Mergers & Acquisitions",
+    ],
+  },
+  {
+    group: "Finance & Tax",
+    areas: [
+      "Banking & Finance",
+      "Tax Law",
+      "GST & Indirect Tax",
+      "Debt Recovery & Insolvency",
+    ],
+  },
+  {
+    group: "Employment & Labour",
+    areas: [
+      "Labour & Employment",
+      "Wrongful Termination",
+      "PF & ESI Disputes",
+    ],
+  },
+  {
+    group: "Consumer & Rights",
+    areas: [
+      "Consumer Protection",
+      "RTI & Public Interest",
+      "Human Rights",
+    ],
+  },
+  {
+    group: "Specialized",
+    areas: [
+      "Intellectual Property",
+      "Immigration",
+      "Motor Accident Claims",
+      "Medical Negligence",
+      "Insurance Disputes",
+      "Environmental Law",
+      "Arbitration & Mediation",
+    ],
+  },
 ];
+
+// Flat list of all individual areas — for category validation
+const PRACTICE_AREAS = PRACTICE_AREAS_GROUPED.flatMap((g) => g.areas);
+
+// Helper: find which group an individual area belongs to
+const getGroupForArea = (area) => {
+  const found = PRACTICE_AREAS_GROUPED.find((g) => g.areas.includes(area));
+  return found ? found.group : null;
+};
 
 // ═══════════════════════════════════════════════════════════
 // parseDOB
@@ -135,22 +169,19 @@ const sendOTP = async (req, res) => {
     const existing = await Advocate.findOne({ email });
     if (existing) return res.status(409).json({ success: false, message: "Email already registered" });
 
-    // ✅ Check karo — kya valid (unexpired, unused) OTP already exist karta hai?
     const existingOTP = await OTP.findOne({
       email,
       purpose: "email_verify",
       isUsed: false,
-      expiresAt: { $gt: new Date() }, // abhi bhi valid hai
+      expiresAt: { $gt: new Date() },
     });
 
     if (existingOTP) {
-      // Purana OTP reuse karo — resend karo same OTP
       await sendOTPEmail(email, existingOTP.otp, "email_verify");
       return res.status(200).json({ success: true, message: "OTP resent successfully (previous OTP is still valid)" });
     }
 
-    // Naya OTP banao — purana expire ho chuka hai ya exist nahi karta
-    await OTP.deleteMany({ email, purpose: "email_verify" }); // cleanup
+    await OTP.deleteMany({ email, purpose: "email_verify" });
     const otp = generateOTP();
     await OTP.create({ email, otp, purpose: "email_verify" });
     await sendOTPEmail(email, otp, "email_verify");
@@ -202,7 +233,6 @@ const sendMobileOTP = async (req, res) => {
     const mobileErr = validateMobile(mobile);
     if (mobileErr) return res.status(400).json({ success: false, message: mobileErr });
 
-    // ✅ Check karo — kya valid OTP already exist karta hai?
     const existingOTP = await OTP.findOne({
       mobile,
       purpose: "mobile_verify",
@@ -211,15 +241,13 @@ const sendMobileOTP = async (req, res) => {
     });
 
     if (existingOTP) {
-      // Reuse — same OTP dobara "send" karo (test mode mein sirf response mein dikhao)
       return res.status(200).json({
         success: true,
         message: `OTP resent successfully (Test OTP: ${existingOTP.otp})`,
       });
     }
 
-    // Naya OTP banao
-    await OTP.deleteMany({ mobile, purpose: "mobile_verify" }); // cleanup
+    await OTP.deleteMany({ mobile, purpose: "mobile_verify" });
     await OTP.create({ mobile, otp: TEST_MOBILE_OTP, purpose: "mobile_verify" });
 
     return res.status(200).json({
@@ -262,24 +290,25 @@ const verifyMobileOTP = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// @route  POST /api/register
-// Files: aadhaarFront, aadhaarBack, panCard,
-//        barCouncilCertificate  — admin verifies after.
+// REGISTER ADVOCATE
+// practiceAreas = group names  (e.g. "Civil & Family")
+// categories    = specific areas inside those groups
+//                 (e.g. "Divorce & Family Law", "Civil Litigation")
 // ═══════════════════════════════════════════════════════════
 const registerAdvocate = async (req, res) => {
   try {
     const {
       fullName, dateOfBirth, gender, mobile, email, password,
       barCouncilNumber, barCouncilState, yearOfEnrollment,
-      practiceAreas, languagesKnown, city, state, officeAddress,
-      pincode, aadhaarNumber, panNumber, accountHolderName,
-      bankName, accountNumber, ifscCode, upiId,
+      practiceAreas, categories, languagesKnown, city, state,
+      officeAddress, pincode, aadhaarNumber, panNumber,
+      accountHolderName, bankName, accountNumber, ifscCode, upiId,
       availableDays, availableFrom, availableTo, perDocumentFee,
     } = req.body;
 
     const files = req.files;
 
-    // ── Field-level validations ──────────────────────────
+    // ── Basic field validations ──────────────────────────
     const emailErr = validateEmail(email);
     if (emailErr) return res.status(400).json({ success: false, message: emailErr });
 
@@ -292,66 +321,58 @@ const registerAdvocate = async (req, res) => {
     const bcnErr = validateBarCouncilNumber(barCouncilNumber);
     if (bcnErr) return res.status(400).json({ success: false, message: bcnErr });
 
-    if (!fullName?.trim()) return res.status(400).json({ success: false, message: "Full name is required" });
-    if (!dateOfBirth) return res.status(400).json({ success: false, message: "Date of birth is required" });
-    if (!gender) return res.status(400).json({ success: false, message: "Gender is required" });
-    if (!barCouncilState?.trim()) return res.status(400).json({ success: false, message: "Bar Council state is required" });
-    if (!yearOfEnrollment) return res.status(400).json({ success: false, message: "Year of enrollment is required" });
-    if (!city?.trim()) return res.status(400).json({ success: false, message: "City is required" });
-    if (!state?.trim()) return res.status(400).json({ success: false, message: "State is required" });
-    if (!officeAddress?.trim()) return res.status(400).json({ success: false, message: "Office address is required" });
-    if (!pincode || !/^\d{6}$/.test(pincode))
-      return res.status(400).json({ success: false, message: "Invalid pincode. Must be 6 digits" });
-    if (!aadhaarNumber || !/^\d{12}$/.test(aadhaarNumber))
-      return res.status(400).json({ success: false, message: "Aadhaar number must be exactly 12 digits" });
-    if (!panNumber || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(panNumber))
-      return res.status(400).json({ success: false, message: "Invalid PAN number format" });
-    if (!ifscCode || !/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(ifscCode))
-      return res.status(400).json({ success: false, message: "Invalid IFSC code format" });
-
-    // ── File checks ──────────────────────────────────────
-    if (!files?.aadhaarFront?.[0]) return res.status(400).json({ success: false, message: "Aadhaar front is required" });
-    if (!files?.aadhaarBack?.[0]) return res.status(400).json({ success: false, message: "Aadhaar back is required" });
-    if (!files?.panCard?.[0]) return res.status(400).json({ success: false, message: "PAN card is required" });
-    if (!files?.barCouncilCertificate?.[0]) return res.status(400).json({ success: false, message: "Bar Council certificate is required" });
-
     const parsedDOB = parseDOB(dateOfBirth);
     if (!parsedDOB) return res.status(400).json({ success: false, message: "Invalid dateOfBirth format" });
 
-    // ── Duplicate checks (409) ──────────────────────────
+    // ── Duplicate checks ─────────────────────────────────
     if (await Advocate.findOne({ email }))
       return res.status(409).json({ success: false, message: "Email already registered" });
     if (await Advocate.findOne({ mobile }))
       return res.status(409).json({ success: false, message: "Mobile number already registered" });
-    if (await Advocate.findOne({ aadhaarNumber }))
-      return res.status(409).json({ success: false, message: "Aadhaar number already registered" });
-    if (await Advocate.findOne({ panNumber: panNumber.toUpperCase() }))
-      return res.status(409).json({ success: false, message: "PAN number already registered" });
-    if (await Advocate.findOne({ barCouncilNumber: barCouncilNumber.toUpperCase() }))
-      return res.status(409).json({ success: false, message: "Bar Council number already registered" });
 
-    // ── OTP verified checks ──────────────────────────────
+    // ── OTP verified check ───────────────────────────────
     const emailOTPVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
     if (!emailOTPVerified)
-      return res.status(400).json({ success: false, message: "Email is not verified. Please verify your email first" });
+      return res.status(400).json({ success: false, message: "Email is not verified." });
 
-    const mobileOTPVerified = await OTP.findOne({ mobile, purpose: "mobile_verify", isUsed: true });
-    if (!mobileOTPVerified)
-      return res.status(400).json({ success: false, message: "Mobile is not verified. Please verify your mobile first" });
+    // ── Parse array fields ───────────────────────────────
+    const parsedPracticeAreas  = typeof practiceAreas  === "string" ? JSON.parse(practiceAreas)  : practiceAreas;
+    const parsedCategories     = typeof categories     === "string" ? JSON.parse(categories)     : categories;
+    const parsedLanguages      = typeof languagesKnown === "string" ? JSON.parse(languagesKnown) : languagesKnown;
+    const parsedAvailableDays  = typeof availableDays  === "string" ? JSON.parse(availableDays)  : availableDays;
 
-    const parsedPracticeAreas = typeof practiceAreas === "string" ? JSON.parse(practiceAreas) : practiceAreas;
-    const parsedLanguages = typeof languagesKnown === "string" ? JSON.parse(languagesKnown) : languagesKnown;
-    const parsedAvailableDays = typeof availableDays === "string" ? JSON.parse(availableDays) : availableDays;
-
-    // ── Validate practice areas against master list ──────
-    const invalidAreas = parsedPracticeAreas.filter((area) => !PRACTICE_AREAS.includes(area));
-    if (invalidAreas.length > 0)
+    // ── Validate practiceAreas — must be valid GROUP names ──
+    const VALID_GROUPS = PRACTICE_AREAS_GROUPED.map(g => g.group);
+    const invalidAreas = parsedPracticeAreas.filter(area => !VALID_GROUPS.includes(area));
+    if (invalidAreas.length > 0) {
       return res.status(400).json({
         success: false,
-        message: `Invalid practice area(s): ${invalidAreas.join(", ")}. Please select from the available options.`,
+        message: `Invalid practice area(s): ${invalidAreas.join(", ")}. Valid options: ${VALID_GROUPS.join(", ")}`,
       });
+    }
 
-    // ── Create advocate — isActive: false, pending admin approval ──
+    // ── Validate categories — must be valid individual AREA names ──
+    const invalidCats = parsedCategories.filter(cat => !PRACTICE_AREAS.includes(cat));
+    if (invalidCats.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid category(ies): ${invalidCats.join(", ")}`,
+      });
+    }
+
+    // ── Cross-check: every category must belong to one of the selected practiceAreas (groups) ──
+    const invalidCross = parsedCategories.filter(cat => {
+      const group = getGroupForArea(cat);
+      return !parsedPracticeAreas.includes(group);
+    });
+    if (invalidCross.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `These categories don't belong to your selected practice areas: ${invalidCross.join(", ")}`,
+      });
+    }
+
+    // ── Create advocate ──────────────────────────────────
     const advocate = await Advocate.create({
       fullName,
       dateOfBirth: parsedDOB,
@@ -362,15 +383,16 @@ const registerAdvocate = async (req, res) => {
       barCouncilNumber: barCouncilNumber.toUpperCase(),
       barCouncilState,
       yearOfEnrollment,
-      practiceAreas: parsedPracticeAreas,
+      practiceAreas: parsedPracticeAreas,   // group names  e.g. ["Civil & Family"]
+      categories: parsedCategories,          // specific areas e.g. ["Divorce & Family Law"]
       languagesKnown: parsedLanguages,
       city, state, officeAddress, pincode,
       aadhaarNumber,
       panNumber: panNumber.toUpperCase(),
       documents: {
-        aadhaarFront: files.aadhaarFront[0].path,
-        aadhaarBack: files.aadhaarBack[0].path,
-        panCard: files.panCard[0].path,
+        aadhaarFront:          files.aadhaarFront[0].path,
+        aadhaarBack:           files.aadhaarBack[0].path,
+        panCard:               files.panCard[0].path,
         barCouncilCertificate: files.barCouncilCertificate[0].path,
       },
       bankDetails: {
@@ -383,66 +405,47 @@ const registerAdvocate = async (req, res) => {
       availableDays: parsedAvailableDays,
       availableHours: { from: availableFrom, to: availableTo },
       perDocumentFee,
-      isEmailVerified: true,
+      isEmailVerified:  true,
       isMobileVerified: true,
-      documentStatus: "pending_review",
-      approvalStatus: "pending",
-      isActive: false,
+      documentStatus:   "pending_review",
+      approvalStatus:   "pending",
+      isActive:         false,
     });
 
-    // ── Notify admin about new advocate registration ─────
     try {
       await sendAdminNewAdvocateNotification(advocate);
     } catch (mailErr) {
-      console.error("Admin notification email error:", mailErr.message);
+      console.error("Admin notification error:", mailErr.message);
     }
 
     return res.status(201).json({
       success: true,
-      message: "Registration successful! Your documents are under review. You will be notified once approved.",
-      data: {
-        id: advocate._id,
-        fullName: advocate.fullName,
-        email: advocate.email,
-        role: advocate.role,
-        documentStatus: advocate.documentStatus,
-        approvalStatus: advocate.approvalStatus,
-      },
+      message: "Registration successful! Your documents are under review.",
+      data: { id: advocate._id, email: advocate.email },
     });
 
   } catch (error) {
     console.error("registerAdvocate Error:", error);
-    if (error.name === "ValidationError") {
-      const messages = Object.values(error.errors).map(e => e.message);
-      return res.status(400).json({ success: false, message: messages[0] });
-    }
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
-      return res.status(409).json({ success: false, message: `${field} already exists` });
-    }
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
 // ═══════════════════════════════════════════════════════════
-// @route  GET /api/advocates/practice-areas
-// Returns master list of all available practice areas
-// Frontend uses this to populate dropdowns / multi-select
+// GET PRACTICE AREAS (grouped)
 // ═══════════════════════════════════════════════════════════
 const getPracticeAreas = async (req, res) => {
   return res.status(200).json({
     success: true,
-    total: PRACTICE_AREAS.length,
-    data: PRACTICE_AREAS,
+    total: PRACTICE_AREAS_GROUPED.length,
+    grouped: PRACTICE_AREAS_GROUPED,
   });
 };
 
 // ═══════════════════════════════════════════════════════════
-// @route  GET /api/advocates/:id
+// GET LOGGED IN ADVOCATE
 // ═══════════════════════════════════════════════════════════
 const getLoginAdvocate = async (req, res) => {
   try {
-    // req.advocate is set by your auth middleware
     const advocate = await Advocate.findById(req.advocate._id).select("-password");
     if (!advocate)
       return res.status(404).json({ success: false, message: "Advocate not found" });
@@ -461,4 +464,5 @@ module.exports = {
   verifyMobileOTP,
   registerAdvocate,
   getPracticeAreas,
-getLoginAdvocate};
+  getLoginAdvocate,
+};

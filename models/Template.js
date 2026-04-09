@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 
-
 const fieldSchema = new mongoose.Schema(
   {
     fieldName: {
@@ -30,12 +29,8 @@ const fieldSchema = new mongoose.Schema(
   { _id: false } 
 );
 
-// ═══════════════════════════════════════════════════════════
-// TEMPLATE SCHEMA
-// ═══════════════════════════════════════════════════════════
 const templateSchema = new mongoose.Schema(
   {
-    // ── Advocate Info ──────────────────────────────────────
     advocateId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Advocate",
@@ -46,11 +41,16 @@ const templateSchema = new mongoose.Schema(
       required: [true, "Advocate name is required"],
       trim: true,
     },
-
-    // ── Template Info ──────────────────────────────────────
+    // Keep practiceArea as a simple string field
     practiceArea: {
       type: String,
       required: [true, "Practice area is required"],
+      trim: true,
+    },
+    // New category field added
+    category: {
+      type: String,
+      required: [true, "Category is required"],
       trim: true,
     },
     caseType: {
@@ -68,8 +68,6 @@ const templateSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-
-    // ── Dynamic Fields (advocate define karega) ────────────
     fields: {
       type: [fieldSchema],
       validate: {
@@ -77,15 +75,13 @@ const templateSchema = new mongoose.Schema(
         message: "At least one field is required",
       },
     },
-
-    // ── Status ─────────────────────────────────────────────
     isActive: {
       type: Boolean,
       default: true,
     },
   },
   {
-    timestamps: true, // createdAt, updatedAt auto
+    timestamps: true,
   }
 );
 

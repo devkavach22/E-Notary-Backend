@@ -525,30 +525,35 @@ const getUserById = async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 const getAdvocatesForUser = async (req, res) => {
   try {
-    const { caseType } = req.query;
+    const { caseType, category } = req.query;
 
-    if (!caseType || !caseType.trim()) {
+    if (!caseType && !category) {
       return res.status(400).json({
         success: false,
-        message: "caseType query parameter is required. Use 'all' to fetch all advocates.",
+        message: "Either 'caseType' or 'category' query parameter is required. Use 'all' to fetch all advocates.",
       });
     }
 
     const baseFilter = { isActive: true, approvalStatus: "approved" };
+    let filter = { ...baseFilter };
 
-    const filter =
-      caseType.trim().toLowerCase() === "all"
-        ? baseFilter
-        : {
-            ...baseFilter,
-            practiceAreas: {
-              $elemMatch: { $regex: new RegExp(`^${caseType.trim()}$`, "i") },
-            },
-          };
+    // ── caseType filter (group name → practiceAreas) ──────
+    if (caseType && caseType.trim().toLowerCase() !== "all") {
+      filter.practiceAreas = {
+        $elemMatch: { $regex: new RegExp(`^${caseType.trim()}$`, "i") },
+      };
+    }
+
+    // ── category filter (specific area → categories) ──────
+    if (category && category.trim().toLowerCase() !== "all") {
+      filter.categories = {
+        $elemMatch: { $regex: new RegExp(`^${category.trim()}$`, "i") },
+      };
+    }
 
     const advocates = await Advocate.find(filter)
       .select(
-        "fullName city state barCouncilState practiceAreas " +
+        "fullName city state barCouncilState practiceAreas categories " +
         "languagesKnown availableDays availableHours perDocumentFee yearOfEnrollment"
       )
       .sort({ createdAt: -1 });
@@ -556,15 +561,18 @@ const getAdvocatesForUser = async (req, res) => {
     if (advocates.length === 0) {
       return res.status(404).json({
         success: false,
-        message: `No advocates found for case type: ${caseType}`,
+        message: `No advocates found for the applied filters`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      caseType: caseType.trim(),
-      total:    advocates.length,
-      data:     advocates,
+      filterApplied: {
+        ...(caseType && caseType.trim().toLowerCase() !== "all" && { caseType: caseType.trim() }),
+        ...(category && category.trim().toLowerCase() !== "all" && { category: category.trim() }),
+      },
+      total: advocates.length,
+      data: advocates,
     });
 
   } catch (error) {
