@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Template = require("../models/Template");
 const Advocate = require("../models/Advocate");
-
+const UserFilledTemplate = require("../models/UserFilledTemplate");
 const VALID_FIELD_TYPES = ["text", "number", "date", "textarea", "image", "file", "dropdown"];
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -41,72 +41,17 @@ const validateFields = (fields) => {
     return null;
 };
 
-// ── CREATE TEMPLATE ──────────────────────────────────────────
-const createTemplate = async (req, res) => {
-    try {
-        const { practiceArea, category, caseType, title, description, fields } = req.body;
-        const advocateId = req.advocate._id;
 
-        const advocate = await Advocate.findById(advocateId).select("fullName approvalStatus isActive");
-        if (!advocate) return res.status(404).json({ success: false, message: "Advocate not found" });
-
-        if (advocate.approvalStatus !== "approved" || !advocate.isActive)
-            return res.status(403).json({ success: false, message: "Unauthorized advocate" });
-
-        // Required field checks
-        if (!practiceArea?.trim()) return res.status(400).json({ success: false, message: "Practice area is required" });
-        if (!category?.trim()) return res.status(400).json({ success: false, message: "Category is required" });
-        if (!caseType?.trim()) return res.status(400).json({ success: false, message: "Case type is required" });
-        if (!title?.trim()) return res.status(400).json({ success: false, message: "Template title is required" });
-
-        // Duplicate check
-        const existing = await Template.findOne({
-            advocateId,
-            caseType: caseType.trim(),
-            title: title.trim(),
-            isActive: true,
-        });
-
-        if (existing) return res.status(409).json({ success: false, message: "Template already exists" });
-
-        if (!fields || !Array.isArray(fields) || fields.length === 0)
-            return res.status(400).json({ success: false, message: "At least one field is required" });
-
-        const fieldError = validateFields(fields);
-        if (fieldError) return res.status(400).json({ success: false, message: fieldError });
-
-        const template = await Template.create({
-            advocateId,
-            advocateName: advocate.fullName,
-            practiceArea: practiceArea.trim(),
-            category: category.trim(),
-            caseType: caseType.trim(),
-            title: title.trim(),
-            description: description?.trim() || "",
-            fields: formatFields(fields),
-        });
-
-        return res.status(201).json({
-            success: true,
-            message: "Template created successfully",
-            data: { ...template.toObject(), fields: cleanFieldsForResponse(template.fields) },
-        });
-
-    } catch (error) {
-        return res.status(500).json({ success: false, message: "Internal server error" });
-    }
-};
 
 // ── GET TEMPLATES ────────────────────────────────────────────
 const getTemplates = async (req, res) => {
     try {
         const advocateId = req.advocate._id;
-        const { practiceArea, category, caseType, isActive, page = 1, limit = 10 } = req.query;
+        const { practiceArea, category, isActive, page = 1, limit = 10 } = req.query;
 
         const filter = { advocateId };
         if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
         if (category?.trim()) filter.category = category.trim();
-        if (caseType?.trim()) filter.caseType = caseType.trim();
         if (isActive !== undefined) filter.isActive = isActive === "true";
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -124,9 +69,85 @@ const getTemplates = async (req, res) => {
         return res.status(200).json({
             success: true,
             data,
-            pagination: { total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / parseInt(limit)) },
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / parseInt(limit)),
+            },
         });
     } catch (error) {
+        console.error("getTemplates Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+// ── CREATE TEMPLATE ──────────────────────────────────────────
+const createTemplate = async (req, res) => {
+    try {
+        const { practiceArea, category, title, description, fields } = req.body;
+        const advocateId = req.advocate._id;
+
+        const advocate = await Advocate.findById(advocateId).select("fullName approvalStatus isActive practiceAreas categories");
+        if (!advocate) return res.status(404).json({ success: false, message: "Advocate not found" });
+
+        if (advocate.approvalStatus !== "approved" || !advocate.isActive)
+            return res.status(403).json({ success: false, message: "Unauthorized advocate" });
+
+        // ── Required field checks ───────────────────────────
+        if (!practiceArea?.trim()) return res.status(400).json({ success: false, message: "Practice area is required" });
+        if (!category?.trim()) return res.status(400).json({ success: false, message: "Category is required" });
+        if (!title?.trim()) return res.status(400).json({ success: false, message: "Template title is required" });
+
+        // ── Advocate practiceArea validation ────────────────
+        if (!advocate.practiceAreas.includes(practiceArea.trim())) {
+            return res.status(403).json({
+                success: false,
+                message: `You are not registered for practice area: "${practiceArea}". Your areas: ${advocate.practiceAreas.join(", ")}`,
+            });
+        }
+
+        // ── Advocate category validation ────────────────────
+        if (!advocate.categories.includes(category.trim())) {
+            return res.status(403).json({
+                success: false,
+                message: `You are not registered for category: "${category}". Your categories: ${advocate.categories.join(", ")}`,
+            });
+        }
+
+        // ── Duplicate check ─────────────────────────────────
+        const existing = await Template.findOne({
+            advocateId,
+            title: title.trim(),
+            isActive: true,
+        });
+        if (existing) return res.status(409).json({ success: false, message: "Template with this title already exists" });
+
+        // ── Fields validation ───────────────────────────────
+        if (!fields || !Array.isArray(fields) || fields.length === 0)
+            return res.status(400).json({ success: false, message: "At least one field is required" });
+
+        const fieldError = validateFields(fields);
+        if (fieldError) return res.status(400).json({ success: false, message: fieldError });
+
+        const template = await Template.create({
+            advocateId,
+            advocateName: advocate.fullName,
+            practiceArea: practiceArea.trim(),
+            category: category.trim(),
+            title: title.trim(),
+            description: description?.trim() || "",
+            fields: formatFields(fields),
+        });
+
+        return res.status(201).json({
+            success: true,
+            message: "Template created successfully",
+            data: { ...template.toObject(), fields: cleanFieldsForResponse(template.fields) },
+        });
+
+    } catch (error) {
+        console.error("createTemplate Error:", error);
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
@@ -140,53 +161,69 @@ const editTemplate = async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(templateId))
             return res.status(400).json({ success: false, message: "Invalid template ID" });
 
+        const advocate = await Advocate.findById(advocateId).select("practiceAreas categories");
+        if (!advocate) return res.status(404).json({ success: false, message: "Advocate not found" });
+
         const template = await Template.findOne({ _id: templateId, advocateId });
         if (!template) return res.status(404).json({ success: false, message: "Template not found" });
 
-        const { practiceArea, category, caseType, title, description, fields, isActive } = req.body;
+        const { practiceArea, category, title, description, fields, isActive } = req.body;
 
         if (practiceArea !== undefined) {
             if (!practiceArea?.trim()) return res.status(400).json({ success: false, message: "Practice area cannot be empty" });
+
+            // ── Advocate practiceArea validation ────────────
+            if (!advocate.practiceAreas.includes(practiceArea.trim())) {
+                return res.status(403).json({
+                    success: false,
+                    message: `You are not registered for practice area: "${practiceArea}". Your areas: ${advocate.practiceAreas.join(", ")}`,
+                });
+            }
             template.practiceArea = practiceArea.trim();
         }
 
         if (category !== undefined) {
             if (!category?.trim()) return res.status(400).json({ success: false, message: "Category cannot be empty" });
+
+            // ── Advocate category validation ─────────────────
+            if (!advocate.categories.includes(category.trim())) {
+                return res.status(403).json({
+                    success: false,
+                    message: `You are not registered for category: "${category}". Your categories: ${advocate.categories.join(", ")}`,
+                });
+            }
             template.category = category.trim();
         }
 
-        const newCaseType = caseType !== undefined ? caseType.trim() : template.caseType;
-        const newTitle = title !== undefined ? title.trim() : template.title;
+        // ── Title duplicate check ───────────────────────────
+        if (title !== undefined) {
+            if (!title?.trim()) return res.status(400).json({ success: false, message: "Title cannot be empty" });
 
-        if (caseType !== undefined && !caseType?.trim()) return res.status(400).json({ success: false, message: "Case type empty" });
-        if (title !== undefined && !title?.trim()) return res.status(400).json({ success: false, message: "Title empty" });
-
-        if (caseType !== undefined || title !== undefined) {
             const duplicate = await Template.findOne({
                 advocateId,
-                caseType: newCaseType,
-                title: newTitle,
+                title: title.trim(),
                 isActive: true,
                 _id: { $ne: templateId },
             });
-            if (duplicate) return res.status(409).json({ success: false, message: "Duplicate title/caseType" });
-        }
+            if (duplicate) return res.status(409).json({ success: false, message: "Template with this title already exists" });
 
-        template.caseType = newCaseType;
-        template.title = newTitle;
+            template.title = title.trim();
+        }
 
         if (description !== undefined) template.description = description?.trim() || "";
         if (isActive !== undefined) template.isActive = Boolean(isActive);
 
         if (fields !== undefined) {
-            if (!Array.isArray(fields) || fields.length === 0) return res.status(400).json({ success: false, message: "Fields required" });
+            if (!Array.isArray(fields) || fields.length === 0)
+                return res.status(400).json({ success: false, message: "Fields cannot be empty" });
+
             const fieldError = validateFields(fields);
             if (fieldError) return res.status(400).json({ success: false, message: fieldError });
 
             const existingNames = new Set(template.fields.map((f) => f.fieldName.toLowerCase()));
             const newFields = formatFields(fields).filter((f) => !existingNames.has(f.fieldName.toLowerCase()));
 
-            if (newFields.length === 0) return res.status(400).json({ success: false, message: "Fields already exist" });
+            if (newFields.length === 0) return res.status(400).json({ success: false, message: "All provided fields already exist in this template" });
             template.fields = [...template.fields, ...newFields];
         }
 
@@ -198,38 +235,92 @@ const editTemplate = async (req, res) => {
         });
 
     } catch (error) {
+        console.error("editTemplate Error:", error);
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
 
+// ── GET TEMPLATE BY ID ───────────────────────────────────────
 const getTemplateById = async (req, res) => {
     try {
         const { templateId } = req.params;
         const advocateId = req.advocate._id;
-        if (!mongoose.Types.ObjectId.isValid(templateId)) return res.status(400).json({ success: false, message: "Invalid ID" });
+
+        if (!mongoose.Types.ObjectId.isValid(templateId))
+            return res.status(400).json({ success: false, message: "Invalid template ID" });
 
         const template = await Template.findOne({ _id: templateId, advocateId }).select("-__v");
-        if (!template) return res.status(404).json({ success: false, message: "Not found" });
+        if (!template) return res.status(404).json({ success: false, message: "Template not found" });
 
         return res.status(200).json({
             success: true,
             data: { ...template.toObject(), fields: cleanFieldsForResponse(template.fields) },
         });
     } catch (error) {
-        return res.status(500).json({ success: false, message: "Error" });
+        console.error("getTemplateById Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
 
+// ── DELETE TEMPLATE ──────────────────────────────────────────
 const deleteTemplate = async (req, res) => {
     try {
         const { templateId } = req.params;
         const advocateId = req.advocate._id;
+
+        if (!mongoose.Types.ObjectId.isValid(templateId))
+            return res.status(400).json({ success: false, message: "Invalid template ID" });
+
         const template = await Template.findOneAndDelete({ _id: templateId, advocateId });
-        if (!template) return res.status(404).json({ success: false, message: "Not found" });
-        return res.status(200).json({ success: true, message: "Deleted" });
+        if (!template) return res.status(404).json({ success: false, message: "Template not found" });
+
+        return res.status(200).json({ success: true, message: "Template deleted successfully" });
     } catch (error) {
-        return res.status(500).json({ success: false, message: "Error" });
+        console.error("deleteTemplate Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
 
-module.exports = { createTemplate, getTemplates, getTemplateById, editTemplate, deleteTemplate };
+// ── GET FILLED TEMPLATES (Advocate) ─────────────────────────
+const getFilledTemplates = async (req, res) => {
+    try {
+        const advocateId = req.advocate._id;
+        const { templateId, page = 1, limit = 10 } = req.query;
+
+        const filter = { advocateId };
+        if (templateId) {
+            if (!mongoose.Types.ObjectId.isValid(templateId))
+                return res.status(400).json({ success: false, message: "Invalid template ID" });
+            filter.templateId = templateId;
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const [submissions, total] = await Promise.all([
+            UserFilledTemplate.find(filter)
+                .populate("userId", "fullName email mobile")
+                .populate("templateId", "title practiceArea category")
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(parseInt(limit))
+                .select("-__v"),
+            UserFilledTemplate.countDocuments(filter),
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            data: submissions,
+            pagination: {
+                total,
+                page:       parseInt(page),
+                limit:      parseInt(limit),
+                totalPages: Math.ceil(total / parseInt(limit)),
+            },
+        });
+
+    } catch (error) {
+        console.error("getFilledTemplates Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+module.exports = { createTemplate, getTemplates, getTemplateById, editTemplate, deleteTemplate, getFilledTemplates };

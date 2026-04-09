@@ -1,11 +1,17 @@
 const User      = require("../models/User");
 const Advocate  = require("../models/Advocate");
+const mongoose  = require("mongoose");
+const Template  = require("../models/Template");
+const UserFilledTemplate = require("../models/UserFilledTemplate"); // ✅ added
 const OTP       = require("../models/OTP");
 const Tesseract = require("tesseract.js");
 const { createCanvas, loadImage } = require("canvas");
 const path      = require("path");
 const fs        = require("fs");
 
+// ═══════════════════════════════════════════════════════════
+// OCR HELPERS
+// ═══════════════════════════════════════════════════════════
 const cleanOCRText = (text) => text.toUpperCase().replace(/\s+/g, " ").trim();
 
 const extractTextOriginal = async (filePath) => {
@@ -108,7 +114,9 @@ const extractTextCanvasSharpen = async (filePath) => {
   } catch (e) { console.error("OCR Sharpen Error:", e.message); return ""; }
 };
 
-
+// ═══════════════════════════════════════════════════════════
+// MISC HELPERS
+// ═══════════════════════════════════════════════════════════
 const parseDOB = (dobInput) => {
   if (!dobInput) return null;
   const str = String(dobInput).trim();
@@ -122,7 +130,6 @@ const parseDOB = (dobInput) => {
   return null;
 };
 
-
 const INVALID_WORDS = new Set([
   "INDIA", "AADHAAR", "UNIQUE", "AUTHORITY", "GOVERNMENT", "DEPT", "INCOME", "GOVT",
   "PERMANENT", "ACCOUNT", "NUMBER", "TAX", "DEPARTMENT", "CARD", "IDENTIFICATION",
@@ -135,9 +142,7 @@ const INVALID_WORDS = new Set([
 ]);
 
 const isNameWord = (w) =>
-  /^[A-Z]{3,}$/.test(w) &&
-  /[AEIOU]/.test(w) &&
-  !INVALID_WORDS.has(w);
+  /^[A-Z]{3,}$/.test(w) && /[AEIOU]/.test(w) && !INVALID_WORDS.has(w);
 
 const isRealName = (name) => {
   if (!name) return false;
@@ -169,33 +174,44 @@ const extractNameByFrequency = (rawText, label = "") => {
   const best3 = Object.entries(freq3).sort((a, b) => b[1] - a[1])[0];
   const best2 = Object.entries(freq2).sort((a, b) => b[1] - a[1])[0];
 
-  if (best3 && best3[1] >= 2) {
-    console.log(`✅ Name (${label} - 3gram ${best3[1]}x):`, best3[0]);
-    return best3[0];
-  }
-  if (best2 && best2[1] >= 2) {
-    console.log(`✅ Name (${label} - 2gram ${best2[1]}x):`, best2[0]);
-    return best2[0];
-  }
+  if (best3 && best3[1] >= 2) { console.log(`✅ Name (${label} - 3gram ${best3[1]}x):`, best3[0]); return best3[0]; }
+  if (best2 && best2[1] >= 2) { console.log(`✅ Name (${label} - 2gram ${best2[1]}x):`, best2[0]); return best2[0]; }
 
   console.log(`❌ Name not reliably found in ${label}`);
   return null;
 };
 
-// ─── Input Validators ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// INPUT VALIDATORS
+// ═══════════════════════════════════════════════════════════
 const validateEmail = (email) => {
-  if (!email)                          return "Email is required";
-  if (email.length > 30)               return "Email must not exceed 30 characters";
-  if (!/^\S+@\S+\.\S+$/.test(email))  return "Invalid email address";
+  if (!email)                         return "Email is required";
+  if (email.length > 30)              return "Email must not exceed 30 characters";
+  if (!/^\S+@\S+\.\S+$/.test(email)) return "Invalid email address";
   return null;
 };
 
 const validatePassword = (password) => {
-  if (!password)              return "Password is required";
-  if (password.length < 8)   return "Password must be at least 8 characters";
-  if (password.length > 28)  return "Password must not exceed 28 characters";
+  if (!password)             return "Password is required";
+  if (password.length < 8)  return "Password must be at least 8 characters";
+  if (password.length > 28) return "Password must not exceed 28 characters";
   return null;
 };
+
+// ═══════════════════════════════════════════════════════════
+// TEMPLATE FIELD HELPER
+// ═══════════════════════════════════════════════════════════
+const cleanFieldsForResponse = (fields) =>
+  fields.map((f) => {
+    const field = {
+      fieldName:   f.fieldName,
+      fieldType:   f.fieldType,
+      required:    f.required,
+      placeholder: f.placeholder,
+    };
+    if (f.fieldType === "dropdown") field.options = f.options;
+    return field;
+  });
 
 // ═══════════════════════════════════════════════════════════
 // SEND EMAIL OTP  (User)
@@ -209,7 +225,6 @@ const sendOTP = async (req, res) => {
     const emailErr = validateEmail(email);
     if (emailErr) return res.status(400).json({ success: false, message: emailErr });
 
-    // Block only if email exists in BOTH tables (same person can be user + advocate)
     const inUser     = await User.findOne({ email });
     const inAdvocate = await Advocate.findOne({ email });
     if (inUser && inAdvocate)
@@ -217,8 +232,8 @@ const sendOTP = async (req, res) => {
 
     const existingOTP = await OTP.findOne({
       email,
-      purpose: "email_verify",
-      isUsed: false,
+      purpose:   "email_verify",
+      isUsed:    false,
       expiresAt: { $gt: new Date() },
     });
 
@@ -276,11 +291,11 @@ const sendMobileOTP = async (req, res) => {
   try {
     const { mobile } = req.body;
 
-    if (!mobile) return res.status(400).json({ success: false, message: "Mobile number is required" });
+    if (!mobile)
+      return res.status(400).json({ success: false, message: "Mobile number is required" });
     if (!/^[6-9]\d{9}$/.test(mobile))
       return res.status(400).json({ success: false, message: "Invalid mobile number format" });
 
-    // Block only if mobile exists in BOTH tables
     const mobileInUser = await User.findOne({ mobile });
     const mobileInAdv  = await Advocate.findOne({ mobile });
     if (mobileInUser && mobileInAdv)
@@ -288,8 +303,8 @@ const sendMobileOTP = async (req, res) => {
 
     const existingOTP = await OTP.findOne({
       mobile,
-      purpose: "mobile_verify",
-      isUsed: false,
+      purpose:   "mobile_verify",
+      isUsed:    false,
       expiresAt: { $gt: new Date() },
     });
 
@@ -380,7 +395,6 @@ const UserverifyDocuments = async (req, res) => {
       console.log("Pass 4:", cleanOCRText(p4).slice(0, 120));
       console.log("==================================\n");
 
-      // ── Aadhaar Number ──
       for (const pat of [
         /\d{4}\s\d{4}\s\d{4}/,
         /\d{4}-\d{4}-\d{4}/,
@@ -395,7 +409,6 @@ const UserverifyDocuments = async (req, res) => {
         }
       }
 
-      // ── DOB from Aadhaar ──
       for (const pat of [
         /DOB\s*:\s*(\d{2}[\/\s\-\.]\d{2}[\/\s\-\.]\d{4})/,
         /DOB\s*:\s*(\d{4}\/\d{4})/,
@@ -415,14 +428,12 @@ const UserverifyDocuments = async (req, res) => {
         }
       }
 
-      // ── Name from Aadhaar ──
       const aadhaarName = extractNameByFrequency(aadhaarRaw, "Aadhaar");
       if (isRealName(aadhaarName)) {
         extractedData.fullName = aadhaarName;
         console.log("✅ Name (Aadhaar):", aadhaarName);
       }
 
-      // ── Gender from Aadhaar ──
       if (/\bFEMALE\b/.test(aadhaarFlat)) {
         extractedData.gender = "female";
       } else if (/\bMALE\b/.test(aadhaarFlat)) {
@@ -500,9 +511,8 @@ const UserverifyDocuments = async (req, res) => {
   }
 };
 
-
 // ═══════════════════════════════════════════════════════════
-// registerUser
+// REGISTER USER
 // ═══════════════════════════════════════════════════════════
 const registerUser = async (req, res) => {
   try {
@@ -515,7 +525,6 @@ const registerUser = async (req, res) => {
       aadhaarFrontPath, panCardPath,
     } = req.body;
 
-    // ── Required fields check ─────────────────────────────
     if (!email || !mobile || !password || !fullName || !dateOfBirth ||
         !aadhaarNumber || !panNumber || !address ||
         !city || !state || !pincode ||
@@ -523,32 +532,24 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ success: false, message: "All fields are required" });
     }
 
-    // ── Email validation ──────────────────────────────────
     const emailErr = validateEmail(email);
     if (emailErr) return res.status(400).json({ success: false, message: emailErr });
 
-    // ── Password validation ───────────────────────────────
     const passwordErr = validatePassword(password);
     if (passwordErr) return res.status(400).json({ success: false, message: passwordErr });
 
-    // ── Mobile format validation ──────────────────────────
     if (!/^[6-9]\d{9}$/.test(mobile))
       return res.status(400).json({ success: false, message: "Invalid mobile number" });
 
-    // ── Aadhaar format validation ─────────────────────────
     if (!/^\d{12}$/.test(aadhaarNumber))
       return res.status(400).json({ success: false, message: "Aadhaar must be 12 digits" });
 
-    // ── PAN format validation ─────────────────────────────
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber.toUpperCase()))
       return res.status(400).json({ success: false, message: "Invalid PAN number format" });
 
-    // ── Pincode format validation ─────────────────────────
     if (!/^\d{6}$/.test(pincode))
       return res.status(400).json({ success: false, message: "Invalid pincode" });
 
-    // ── Duplicate checks (cross-collection) ──────────────
-    // Block only if the same email/mobile exists in BOTH tables
     const emailInUser = await User.findOne({ email });
     const emailInAdv  = await Advocate.findOne({ email });
     if (emailInUser && emailInAdv)
@@ -559,14 +560,12 @@ const registerUser = async (req, res) => {
     if (mobileInUser && mobileInAdv)
       return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
 
-    // ── Aadhaar / PAN unique within User table only ───────
     if (await User.findOne({ aadhaarNumber }))
       return res.status(409).json({ success: false, message: "Aadhaar number is already registered" });
 
     if (await User.findOne({ panNumber: panNumber.toUpperCase() }))
       return res.status(409).json({ success: false, message: "PAN number is already registered" });
 
-    // ── OTP verification checks ───────────────────────────
     const emailVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
     if (!emailVerified)
       return res.status(400).json({ success: false, message: "Email is not verified. Please verify your email first" });
@@ -575,17 +574,12 @@ const registerUser = async (req, res) => {
     if (!mobileVerified)
       return res.status(400).json({ success: false, message: "Mobile is not verified. Please verify your mobile first" });
 
-    // ── DOB parse ─────────────────────────────────────────
     const parsedDOB = parseDOB(dateOfBirth);
     if (!parsedDOB)
       return res.status(400).json({ success: false, message: "Invalid date of birth format" });
 
-    // ── Create user ───────────────────────────────────────
     const user = await User.create({
-      email,
-      mobile,
-      password,
-      fullName,
+      email, mobile, password, fullName,
       dateOfBirth: parsedDOB,
       gender:      gender || null,
       aadhaarNumber,
@@ -638,9 +632,8 @@ const registerUser = async (req, res) => {
   }
 };
 
-
 // ═══════════════════════════════════════════════════════════
-// getUserById
+// GET USER BY ID
 // ═══════════════════════════════════════════════════════════
 const getUserById = async (req, res) => {
   try {
@@ -661,11 +654,8 @@ const getUserById = async (req, res) => {
   }
 };
 
-
 // ═══════════════════════════════════════════════════════════
-// @route  GET /api/user/advocates?caseType=Divorce & Family Law
-// User selects a case type → returns matching active & approved advocates
-// Use caseType=all to fetch all available advocates
+// GET ADVOCATES FOR USER
 // ═══════════════════════════════════════════════════════════
 const getAdvocatesForUser = async (req, res) => {
   try {
@@ -681,14 +671,12 @@ const getAdvocatesForUser = async (req, res) => {
     const baseFilter = { isActive: true, approvalStatus: "approved" };
     let filter = { ...baseFilter };
 
-    // ── caseType filter (group name → practiceAreas) ──────
     if (caseType && caseType.trim().toLowerCase() !== "all") {
       filter.practiceAreas = {
         $elemMatch: { $regex: new RegExp(`^${caseType.trim()}$`, "i") },
       };
     }
 
-    // ── category filter (specific area → categories) ──────
     if (category && category.trim().toLowerCase() !== "all") {
       filter.categories = {
         $elemMatch: { $regex: new RegExp(`^${category.trim()}$`, "i") },
@@ -705,7 +693,7 @@ const getAdvocatesForUser = async (req, res) => {
     if (advocates.length === 0) {
       return res.status(404).json({
         success: false,
-        message: `No advocates found for the applied filters`,
+        message: "No advocates found for the applied filters",
       });
     }
 
@@ -716,7 +704,7 @@ const getAdvocatesForUser = async (req, res) => {
         ...(category && category.trim().toLowerCase() !== "all" && { category: category.trim() }),
       },
       total: advocates.length,
-      data: advocates,
+      data:  advocates,
     });
 
   } catch (error) {
@@ -725,7 +713,151 @@ const getAdvocatesForUser = async (req, res) => {
   }
 };
 
+// ═══════════════════════════════════════════════════════════
+// GET TEMPLATES FOR USER
+// ═══════════════════════════════════════════════════════════
+const getTemplatesForUser = async (req, res) => {
+  try {
+    const { advocateId } = req.params;
+    const { practiceArea, category } = req.query;
 
+    if (!mongoose.Types.ObjectId.isValid(advocateId))
+      return res.status(400).json({ success: false, message: "Invalid advocate ID" });
+
+    const advocate = await Advocate.findOne({
+      _id:            advocateId,
+      approvalStatus: "approved",
+      isActive:       true,
+    }).select("fullName");
+
+    if (!advocate)
+      return res.status(404).json({ success: false, message: "Advocate not found or not active" });
+
+    const user = await User.findById(req.user._id).select(
+      "-password -role -isEmailVerified -isMobileVerified -verificationChecks -isActive -documents -__v"
+    );
+
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    const filter = { advocateId, isActive: true };
+    if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
+    if (category?.trim())     filter.category     = category.trim();
+
+    const templates = await Template.find(filter)
+      .sort({ createdAt: -1 })
+      .select("-__v");
+
+    if (templates.length === 0)
+      return res.status(404).json({ success: false, message: "No templates found" });
+
+    return res.status(200).json({
+      success:      true,
+      advocateName: advocate.fullName,
+      filterApplied: {
+        ...(practiceArea?.trim() && { practiceArea: practiceArea.trim() }),
+        ...(category?.trim()     && { category:     category.trim()     }),
+      },
+      totalTemplates: templates.length,
+      userData: user,
+      data: templates.map((t) => ({
+        ...t.toObject(),
+        fields: cleanFieldsForResponse(t.fields),
+      })),
+    });
+  } catch (error) {
+    console.error("getTemplatesForUser Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// FILL TEMPLATE  (User)                                    ✅
+// ═══════════════════════════════════════════════════════════
+const fillTemplate = async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const { filledFields } = req.body;
+
+    // ── Validate ID ──────────────────────────────────────
+    if (!mongoose.Types.ObjectId.isValid(templateId))
+      return res.status(400).json({ success: false, message: "Invalid template ID" });
+
+    // ── User token se auto ───────────────────────────────
+    if (!req.user?._id)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    // ── Fetch template ───────────────────────────────────
+    const template = await Template.findOne({ _id: templateId, isActive: true });
+    if (!template)
+      return res.status(404).json({ success: false, message: "Template not found or inactive" });
+
+    // ── Validate filledFields ────────────────────────────
+    if (!Array.isArray(filledFields) || filledFields.length === 0)
+      return res.status(400).json({ success: false, message: "filledFields are required" });
+
+    // ── Check required fields ────────────────────────────
+    const missingFields = [];
+
+    for (const templateField of template.fields) {
+      if (templateField.required) {
+        const userField = filledFields.find(
+          (f) => f.fieldName.trim().toLowerCase() === templateField.fieldName.trim().toLowerCase()
+        );
+        const isEmpty =
+          !userField ||
+          userField.value === null ||
+          userField.value === undefined ||
+          String(userField.value).trim() === "";
+
+        if (isEmpty) missingFields.push(templateField.fieldName);
+      }
+    }
+
+    if (missingFields.length > 0)
+      return res.status(400).json({
+        success: false,
+        message: `Required fields missing: ${missingFields.join(", ")}`,
+      });
+
+    // ── Build enrichedFields ─────────────────────────────
+    const enrichedFields = filledFields.map((userField) => {
+      const templateField = template.fields.find(
+        (f) => f.fieldName.trim().toLowerCase() === userField.fieldName.trim().toLowerCase()
+      );
+      return {
+        fieldName: userField.fieldName.trim(),
+        fieldType: templateField?.fieldType || "text",
+        value:     userField.value,
+      };
+    });
+
+    // ── Save ─────────────────────────────────────────────
+    const filledTemplate = await UserFilledTemplate.create({
+      templateId:   template._id,
+      advocateId:   template.advocateId,  // ✅ template se auto
+      userId:       req.user._id,         // ✅ token se auto
+      title:        template.title,
+      practiceArea: template.practiceArea,
+      category:     template.category,
+      filledFields: enrichedFields,
+      status:       "submitted",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Template submitted successfully",
+      data:    filledTemplate,
+    });
+  } catch (error) {
+    console.error("fillTemplate Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// EXPORTS
+// ═══════════════════════════════════════════════════════════
 module.exports = {
   sendOTP,
   verifyOTP,
@@ -735,4 +867,6 @@ module.exports = {
   registerUser,
   getUserById,
   getAdvocatesForUser,
+  getTemplatesForUser,
+  fillTemplate,           // ✅ added
 };

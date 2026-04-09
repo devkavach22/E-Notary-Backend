@@ -26,7 +26,7 @@ const fieldSchema = new mongoose.Schema(
       default: [],
     },
   },
-  { _id: false } 
+  { _id: false }
 );
 
 const templateSchema = new mongoose.Schema(
@@ -41,21 +41,14 @@ const templateSchema = new mongoose.Schema(
       required: [true, "Advocate name is required"],
       trim: true,
     },
-    // Keep practiceArea as a simple string field
     practiceArea: {
       type: String,
       required: [true, "Practice area is required"],
       trim: true,
     },
-    // New category field added
     category: {
       type: String,
       required: [true, "Category is required"],
-      trim: true,
-    },
-    caseType: {
-      type: String,
-      required: [true, "Case type is required"],
       trim: true,
     },
     title: {

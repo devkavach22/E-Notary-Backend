@@ -27,68 +27,59 @@ const validatePassword = (password) => {
 // ─────────────────────────────────────────────────────────
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and password are required",
-      });
-    }
+    if (!email || !password)
+      return res.status(400).json({ success: false, message: "Email and password are required" });
 
-    // ── Check Admin → Advocate → User ──
-    let user = await Admin.findOne({ email }).select("+password");
-    if (!user) user = await Advocate.findOne({ email }).select("+password");
-    if (!user) user = await User.findOne({ email }).select("+password");
+    if (!role)
+      return res.status(400).json({ success: false, message: "Role is required" });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "No account found with this email",
-      });
-    }
+    if (!["admin", "advocate", "user"].includes(role))
+      return res.status(400).json({ success: false, message: "Invalid role. Must be admin, advocate or user" });
+
+    // ── Find user based on role ──
+    let user;
+    if (role === "admin")    user = await Admin.findOne({ email }).select("+password");
+    if (role === "advocate") user = await Advocate.findOne({ email }).select("+password");
+    if (role === "user")     user = await User.findOne({ email }).select("+password");
+
+    if (!user)
+      return res.status(404).json({ success: false, message: `No ${role} account found with this email` });
 
     // ── Password reset pending check ──
     const pendingReset = await OTP.findOne({
       email,
-      purpose: "forget_password",
-      isUsed: false,
+      purpose:              "forget_password",
+      isUsed:               false,
       passwordResetPending: true,
-      expiresAt: { $gt: new Date() },
+      expiresAt:            { $gt: new Date() },
     });
 
-    if (pendingReset) {
+    if (pendingReset)
       return res.status(403).json({
         success: false,
         message: "Your password reset is in progress. Please complete it before logging in",
       });
-    }
 
     // ── Verify password ──
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: "Incorrect password",
-      });
-    }
-
-    const role = user.role;
+    if (!isMatch)
+      return res.status(400).json({ success: false, message: "Incorrect password" });
 
     // ── Advocate-specific approval checks ──
     if (role === "advocate") {
-      if (user.approvalStatus === "pending") {
+      if (user.approvalStatus === "pending")
         return res.status(403).json({
           success: false,
           message: "Your account is under review. Please wait for admin approval",
         });
-      }
-      if (user.approvalStatus === "rejected") {
+
+      if (user.approvalStatus === "rejected")
         return res.status(403).json({
           success: false,
           message: `Your account has been rejected. Reason: ${user.rejectionReason || "Contact admin"}`,
         });
-      }
     }
 
     const token = generateToken(user._id, role);
@@ -98,20 +89,23 @@ const login = async (req, res) => {
       message: "Login successful",
       token,
       data: {
-        id: user._id,
+        id:    user._id,
         email: user.email,
         role,
-        // Advocate ke liye practiceAreas yahan add kiye hain
-        ...(role === "advocate" && {
+        ...(role === "admin" && {
           fullName: user.fullName,
+        }),
+        ...(role === "advocate" && {
+          fullName:       user.fullName,
           approvalStatus: user.approvalStatus,
-          practiceAreas: user.practiceAreas, // <--- Added this line
+          practiceAreas:  user.practiceAreas,
         }),
         ...(role === "user" && {
           fullName: user.fullName,
         }),
       },
     });
+
   } catch (error) {
     console.error("login Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });

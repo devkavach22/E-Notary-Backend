@@ -11,6 +11,7 @@ const {
   getTemplateById,
   editTemplate,
   deleteTemplate,
+  getFilledTemplates
 } = require("../controllers/Template.controller");
 
 const { login, sendForgetPasswordOtp, confirmPassword } = require("../controllers/Auth.controller");
@@ -19,7 +20,7 @@ const {
   recordingUpload,
   handleUploadError,
 } = require("../middlewares/upload.middleware");
-const { UserverifyDocuments, registerUser, getUserById, getAdvocatesForUser } = require("../controllers/User.controller");
+const { UserverifyDocuments, registerUser, getUserById, getAdvocatesForUser,getTemplatesForUser,fillTemplate } = require("../controllers/User.controller");
 const { bookAdvocate, getUserBookings } = require("../controllers/Booking.controller");
 const {
   getAllAdvocates, getAdvocateDetails,
@@ -64,13 +65,16 @@ router.get   ("/templates",              advocateAuth, getTemplates);
 router.get   ("/template/:templateId",   advocateAuth, getTemplateById);
 router.put   ("/template/:templateId",   advocateAuth, editTemplate);
 router.delete("/template/:templateId",   advocateAuth, deleteTemplate);
+router.get   ("/userfilled-templates",      advocateAuth, getFilledTemplates);
 
 // ─── User ────────────────────────────────────────────────
 router.post("/user/verify-documents", userUpload, handleUploadError, UserverifyDocuments);
 router.post("/user/register", userUpload, handleUploadError, registerUser);
-router.get("/user/advocates", getAdvocatesForUser);
+router.get("/user/advocates",userAuth, getAdvocatesForUser);
+router.get("/user/advocate/:advocateId/templates", userAuth, getTemplatesForUser);
+router.post("/templates/:templateId/fill", userAuth, fillTemplate);
 
-// ─── Admin ───────────────────────────────────────────────
+  // ─── Admin ───────────────────────────────────────────────
 router.get("/admin/advocates",         adminAuth, getAllAdvocates);
 router.get("/admin/users",             adminAuth, getAllUsers);
 router.get("/admin/advocates/pending", adminAuth, getPendingAdvocates);
