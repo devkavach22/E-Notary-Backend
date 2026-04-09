@@ -1,4 +1,5 @@
 const Advocate = require("../models/Advocate");
+const User = require("../models/User");
 const OTP = require("../models/OTP");
 const { generateOTP, sendOTPEmail, sendAdminNewAdvocateNotification } = require("./sendOTP");
 
@@ -117,17 +118,11 @@ const PRACTICE_AREAS_GROUPED = [
 // Flat list of all individual areas — for category validation
 const PRACTICE_AREAS = PRACTICE_AREAS_GROUPED.flatMap((g) => g.areas);
 
-// Helper: find which group an individual area belongs to
 const getGroupForArea = (area) => {
   const found = PRACTICE_AREAS_GROUPED.find((g) => g.areas.includes(area));
   return found ? found.group : null;
 };
 
-// ═══════════════════════════════════════════════════════════
-// parseDOB
-// Accepts: DD/MM/YYYY | YYYY-MM-DD | ISO string
-// Always stores as UTC noon to avoid timezone date shift
-// ═══════════════════════════════════════════════════════════
 const parseDOB = (dobInput) => {
   if (!dobInput) return null;
   const str = String(dobInput).trim();
@@ -166,8 +161,10 @@ const sendOTP = async (req, res) => {
     const emailErr = validateEmail(email);
     if (emailErr) return res.status(400).json({ success: false, message: emailErr });
 
-    const existing = await Advocate.findOne({ email });
-    if (existing) return res.status(409).json({ success: false, message: "Email already registered" });
+    const inAdvocate = await Advocate.findOne({ email });
+    const inUser     = await User.findOne({ email });
+    if (inAdvocate && inUser)
+      return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
 
     const existingOTP = await OTP.findOne({
       email,
@@ -232,6 +229,12 @@ const sendMobileOTP = async (req, res) => {
 
     const mobileErr = validateMobile(mobile);
     if (mobileErr) return res.status(400).json({ success: false, message: mobileErr });
+
+    // Block only if mobile exists in BOTH tables
+    const mobileInAdv  = await Advocate.findOne({ mobile });
+    const mobileInUser = await User.findOne({ mobile });
+    if (mobileInAdv && mobileInUser)
+      return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
 
     const existingOTP = await OTP.findOne({
       mobile,
@@ -324,11 +327,17 @@ const registerAdvocate = async (req, res) => {
     const parsedDOB = parseDOB(dateOfBirth);
     if (!parsedDOB) return res.status(400).json({ success: false, message: "Invalid dateOfBirth format" });
 
-    // ── Duplicate checks ─────────────────────────────────
-    if (await Advocate.findOne({ email }))
-      return res.status(409).json({ success: false, message: "Email already registered" });
-    if (await Advocate.findOne({ mobile }))
-      return res.status(409).json({ success: false, message: "Mobile number already registered" });
+    // ── Duplicate checks (cross-collection) ─────────────
+    // Block only if the same email/mobile exists in BOTH tables
+    const emailInAdv  = await Advocate.findOne({ email });
+    const emailInUser = await User.findOne({ email });
+    if (emailInAdv && emailInUser)
+      return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
+
+    const mobileInAdv  = await Advocate.findOne({ mobile });
+    const mobileInUser = await User.findOne({ mobile });
+    if (mobileInAdv && mobileInUser)
+      return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
 
     // ── OTP verified check ───────────────────────────────
     const emailOTPVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
@@ -383,8 +392,8 @@ const registerAdvocate = async (req, res) => {
       barCouncilNumber: barCouncilNumber.toUpperCase(),
       barCouncilState,
       yearOfEnrollment,
-      practiceAreas: parsedPracticeAreas,   // group names  e.g. ["Civil & Family"]
-      categories: parsedCategories,          // specific areas e.g. ["Divorce & Family Law"]
+      practiceAreas: parsedPracticeAreas,
+      categories: parsedCategories,
       languagesKnown: parsedLanguages,
       city, state, officeAddress, pincode,
       aadhaarNumber,

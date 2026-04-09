@@ -197,6 +197,150 @@ const validatePassword = (password) => {
   return null;
 };
 
+// ═══════════════════════════════════════════════════════════
+// SEND EMAIL OTP  (User)
+// ═══════════════════════════════════════════════════════════
+const { generateOTP, sendOTPEmail } = require("./sendOTP");
+
+const sendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const emailErr = validateEmail(email);
+    if (emailErr) return res.status(400).json({ success: false, message: emailErr });
+
+    // Block only if email exists in BOTH tables (same person can be user + advocate)
+    const inUser     = await User.findOne({ email });
+    const inAdvocate = await Advocate.findOne({ email });
+    if (inUser && inAdvocate)
+      return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
+
+    const existingOTP = await OTP.findOne({
+      email,
+      purpose: "email_verify",
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (existingOTP) {
+      await sendOTPEmail(email, existingOTP.otp, "email_verify");
+      return res.status(200).json({ success: true, message: "OTP resent successfully (previous OTP is still valid)" });
+    }
+
+    await OTP.deleteMany({ email, purpose: "email_verify" });
+    const otp = generateOTP();
+    await OTP.create({ email, otp, purpose: "email_verify" });
+    await sendOTPEmail(email, otp, "email_verify");
+
+    return res.status(200).json({ success: true, message: "OTP sent successfully" });
+  } catch (error) {
+    console.error("sendOTP Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// VERIFY EMAIL OTP  (User)
+// ═══════════════════════════════════════════════════════════
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp)
+      return res.status(400).json({ success: false, message: "Email and OTP are required" });
+
+    const otpRecord = await OTP.findOne({ email, purpose: "email_verify", isUsed: false });
+    if (!otpRecord)
+      return res.status(404).json({ success: false, message: "OTP not found or already used" });
+    if (otpRecord.expiresAt < new Date())
+      return res.status(400).json({ success: false, message: "OTP has expired. Please request a new one" });
+    if (otpRecord.otp !== otp)
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+
+    return res.status(200).json({ success: true, message: "OTP verified successfully" });
+  } catch (error) {
+    console.error("verifyOTP Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// SEND MOBILE OTP  (User — hardcoded test OTP)
+// ═══════════════════════════════════════════════════════════
+const TEST_MOBILE_OTP = "872356";
+
+const sendMobileOTP = async (req, res) => {
+  try {
+    const { mobile } = req.body;
+
+    if (!mobile) return res.status(400).json({ success: false, message: "Mobile number is required" });
+    if (!/^[6-9]\d{9}$/.test(mobile))
+      return res.status(400).json({ success: false, message: "Invalid mobile number format" });
+
+    // Block only if mobile exists in BOTH tables
+    const mobileInUser = await User.findOne({ mobile });
+    const mobileInAdv  = await Advocate.findOne({ mobile });
+    if (mobileInUser && mobileInAdv)
+      return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
+
+    const existingOTP = await OTP.findOne({
+      mobile,
+      purpose: "mobile_verify",
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (existingOTP) {
+      return res.status(200).json({
+        success: true,
+        message: `OTP resent successfully (Test OTP: ${existingOTP.otp})`,
+      });
+    }
+
+    await OTP.deleteMany({ mobile, purpose: "mobile_verify" });
+    await OTP.create({ mobile, otp: TEST_MOBILE_OTP, purpose: "mobile_verify" });
+
+    return res.status(200).json({
+      success: true,
+      message: `OTP sent successfully (Test OTP: ${TEST_MOBILE_OTP})`,
+    });
+  } catch (error) {
+    console.error("sendMobileOTP Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// VERIFY MOBILE OTP  (User)
+// ═══════════════════════════════════════════════════════════
+const verifyMobileOTP = async (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+
+    if (!mobile || !otp)
+      return res.status(400).json({ success: false, message: "Mobile and OTP are required" });
+
+    const otpRecord = await OTP.findOne({ mobile, purpose: "mobile_verify", isUsed: false });
+    if (!otpRecord)
+      return res.status(404).json({ success: false, message: "OTP not found or already used. Please request a new one." });
+    if (otpRecord.expiresAt < new Date())
+      return res.status(400).json({ success: false, message: "OTP has expired. Please request a new one." });
+    if (otpRecord.otp !== otp)
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+    await User.findOneAndUpdate({ mobile }, { isMobileVerified: true });
+
+    return res.status(200).json({ success: true, message: "Mobile verified successfully" });
+  } catch (error) {
+    console.error("verifyMobileOTP Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
 
 // ═══════════════════════════════════════════════════════════
 // UserverifyDocuments
@@ -371,7 +515,7 @@ const registerUser = async (req, res) => {
       aadhaarFrontPath, panCardPath,
     } = req.body;
 
-    // ── Required fields check (400) ───────────────────────────
+    // ── Required fields check ─────────────────────────────
     if (!email || !mobile || !password || !fullName || !dateOfBirth ||
         !aadhaarNumber || !panNumber || !address ||
         !city || !state || !pincode ||
@@ -379,48 +523,50 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ success: false, message: "All fields are required" });
     }
 
-    // ── Email validation (400) ────────────────────────────────
+    // ── Email validation ──────────────────────────────────
     const emailErr = validateEmail(email);
     if (emailErr) return res.status(400).json({ success: false, message: emailErr });
 
-    // ── Password validation (400) ─────────────────────────────
+    // ── Password validation ───────────────────────────────
     const passwordErr = validatePassword(password);
     if (passwordErr) return res.status(400).json({ success: false, message: passwordErr });
 
-    // ── Mobile format validation (400) ────────────────────────
-    if (!/^[6-9]\d{9}$/.test(mobile)) {
+    // ── Mobile format validation ──────────────────────────
+    if (!/^[6-9]\d{9}$/.test(mobile))
       return res.status(400).json({ success: false, message: "Invalid mobile number" });
-    }
 
-    // ── Aadhaar format validation (400) ───────────────────────
-    if (!/^\d{12}$/.test(aadhaarNumber)) {
+    // ── Aadhaar format validation ─────────────────────────
+    if (!/^\d{12}$/.test(aadhaarNumber))
       return res.status(400).json({ success: false, message: "Aadhaar must be 12 digits" });
-    }
 
-    // ── PAN format validation (400) ───────────────────────────
-    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber.toUpperCase())) {
+    // ── PAN format validation ─────────────────────────────
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber.toUpperCase()))
       return res.status(400).json({ success: false, message: "Invalid PAN number format" });
-    }
 
-    // ── Pincode format validation (400) ───────────────────────
-    if (!/^\d{6}$/.test(pincode)) {
+    // ── Pincode format validation ─────────────────────────
+    if (!/^\d{6}$/.test(pincode))
       return res.status(400).json({ success: false, message: "Invalid pincode" });
-    }
 
-    // ── Duplicate checks (409) ────────────────────────────────
-    if (await User.findOne({ email }))
-      return res.status(409).json({ success: false, message: "Email is already registered" });
+    // ── Duplicate checks (cross-collection) ──────────────
+    // Block only if the same email/mobile exists in BOTH tables
+    const emailInUser = await User.findOne({ email });
+    const emailInAdv  = await Advocate.findOne({ email });
+    if (emailInUser && emailInAdv)
+      return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
 
-    if (await User.findOne({ mobile }))
-      return res.status(409).json({ success: false, message: "Mobile number is already registered" });
+    const mobileInUser = await User.findOne({ mobile });
+    const mobileInAdv  = await Advocate.findOne({ mobile });
+    if (mobileInUser && mobileInAdv)
+      return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
 
+    // ── Aadhaar / PAN unique within User table only ───────
     if (await User.findOne({ aadhaarNumber }))
       return res.status(409).json({ success: false, message: "Aadhaar number is already registered" });
 
     if (await User.findOne({ panNumber: panNumber.toUpperCase() }))
       return res.status(409).json({ success: false, message: "PAN number is already registered" });
 
-    // ── OTP verification checks (400) ─────────────────────────
+    // ── OTP verification checks ───────────────────────────
     const emailVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
     if (!emailVerified)
       return res.status(400).json({ success: false, message: "Email is not verified. Please verify your email first" });
@@ -429,12 +575,12 @@ const registerUser = async (req, res) => {
     if (!mobileVerified)
       return res.status(400).json({ success: false, message: "Mobile is not verified. Please verify your mobile first" });
 
-    // ── DOB parse (400) ───────────────────────────────────────
+    // ── DOB parse ─────────────────────────────────────────
     const parsedDOB = parseDOB(dateOfBirth);
     if (!parsedDOB)
       return res.status(400).json({ success: false, message: "Invalid date of birth format" });
 
-    // ── Create user ───────────────────────────────────────────
+    // ── Create user ───────────────────────────────────────
     const user = await User.create({
       email,
       mobile,
@@ -471,13 +617,11 @@ const registerUser = async (req, res) => {
   } catch (error) {
     console.error("registerUser Error:", error);
 
-    // Mongoose validation errors (400)
     if (error.name === "ValidationError") {
       const msgs = Object.values(error.errors).map(e => e.message);
       return res.status(400).json({ success: false, message: msgs[0] });
     }
 
-    // MongoDB duplicate key (409)
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
       const fieldLabels = {
@@ -582,4 +726,13 @@ const getAdvocatesForUser = async (req, res) => {
 };
 
 
-module.exports = { UserverifyDocuments, registerUser, getUserById, getAdvocatesForUser };
+module.exports = {
+  sendOTP,
+  verifyOTP,
+  sendMobileOTP,
+  verifyMobileOTP,
+  UserverifyDocuments,
+  registerUser,
+  getUserById,
+  getAdvocatesForUser,
+};
