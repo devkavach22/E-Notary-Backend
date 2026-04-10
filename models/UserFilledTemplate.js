@@ -13,7 +13,7 @@ const filledFieldSchema = new mongoose.Schema(
       required: true,
     },
     value: {
-      type: mongoose.Schema.Types.Mixed, 
+      type: mongoose.Schema.Types.Mixed,
       default: null,
     },
   },
@@ -55,8 +55,13 @@ const userFilledTemplateSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "submitted"],
+      enum: ["submitted", "accepted", "rejected"],
       default: "submitted",
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      default: null,
     },
   },
   { timestamps: true }

@@ -11,7 +11,9 @@ const {
   getTemplateById,
   editTemplate,
   deleteTemplate,
-  getFilledTemplates
+  getFilledTemplates,
+  rejectSubmission,
+  acceptSubmission
 } = require("../controllers/Template.controller");
 
 const { login, sendForgetPasswordOtp, confirmPassword } = require("../controllers/Auth.controller");
@@ -60,6 +62,9 @@ router.get   ("/template/:templateId",   advocateAuth, getTemplateById);
 router.put   ("/template/:templateId",   advocateAuth, editTemplate);
 router.delete("/template/:templateId",   advocateAuth, deleteTemplate);
 router.get   ("/userfilled-templates",      advocateAuth, getFilledTemplates);
+
+router.patch("/submissions/:submissionId/accept", advocateAuth, acceptSubmission);
+router.patch("/submissions/:submissionId/reject", advocateAuth, rejectSubmission);
 
 router.post("/user/verify-documents", userUpload, handleUploadError, UserverifyDocuments);
 router.post("/user/register", userUpload, handleUploadError, registerUser);

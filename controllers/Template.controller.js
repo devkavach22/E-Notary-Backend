@@ -3,6 +3,7 @@ const Template = require("../models/Template");
 const Advocate = require("../models/Advocate");
 const UserFilledTemplate = require("../models/UserFilledTemplate");
 const VALID_FIELD_TYPES = ["text", "number", "date", "textarea", "image", "file", "dropdown"];
+const { sendTemplateAcceptedEmail, sendTemplateRejectedEmail } = require("./sendOTP");
 
 // ── Helpers ─────────────────────────────────────────────────
 const formatFields = (fields) =>
@@ -323,4 +324,126 @@ const getFilledTemplates = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
-module.exports = { createTemplate, getTemplates, getTemplateById, editTemplate, deleteTemplate, getFilledTemplates };
+const acceptSubmission = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const advocateId = req.advocate._id;
+
+    if (!mongoose.Types.ObjectId.isValid(submissionId))
+      return res.status(400).json({ success: false, message: "Invalid submission ID" });
+
+    const submission = await UserFilledTemplate.findOne({ _id: submissionId, advocateId })
+      .populate("userId", "fullName email")
+      .populate("templateId", "title");
+
+    if (!submission)
+      return res.status(404).json({ success: false, message: "Submission not found" });
+
+    if (submission.status !== "submitted")
+      return res.status(400).json({
+        success: false,
+        message: `Submission is already ${submission.status}`,
+      });
+
+    submission.status = "accepted";
+    submission.rejectionReason = null;
+    await submission.save();
+
+    // Send acceptance email to user (non-blocking)
+    try {
+      if (submission.userId?.email) {
+        await sendTemplateAcceptedEmail({
+          userEmail:     submission.userId.email,
+          userName:      submission.userId.fullName,
+          advocateName:  req.advocate.fullName,
+          templateTitle: submission.title,
+          practiceArea:  submission.practiceArea,
+          category:      submission.category,
+          submissionId:  submission._id.toString(),
+        });
+        console.log("✅ Acceptance email sent to user:", submission.userId.email);
+      }
+    } catch (emailErr) {
+      console.warn("⚠️ Acceptance email failed (non-blocking):", emailErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Submission accepted successfully",
+      data: { submissionId: submission._id, status: submission.status },
+    });
+  } catch (error) {
+    console.error("acceptSubmission Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ── REJECT SUBMISSION ────────────────────────────────────────
+const rejectSubmission = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { reason } = req.body;
+    const advocateId = req.advocate._id;
+
+    if (!mongoose.Types.ObjectId.isValid(submissionId))
+      return res.status(400).json({ success: false, message: "Invalid submission ID" });
+
+    if (!reason?.trim())
+      return res.status(400).json({ success: false, message: "Rejection reason is required" });
+
+    if (reason.trim().length > 500)
+      return res.status(400).json({ success: false, message: "Reason must not exceed 500 characters" });
+
+    const submission = await UserFilledTemplate.findOne({ _id: submissionId, advocateId })
+      .populate("userId", "fullName email")
+      .populate("templateId", "title");
+
+    if (!submission)
+      return res.status(404).json({ success: false, message: "Submission not found" });
+
+    if (submission.status !== "submitted")
+      return res.status(400).json({
+        success: false,
+        message: `Submission is already ${submission.status}`,
+      });
+
+    submission.status = "rejected";
+    submission.rejectionReason = reason.trim();
+    await submission.save();
+
+    // Send rejection email to user (non-blocking)
+    try {
+      if (submission.userId?.email) {
+        await sendTemplateRejectedEmail({
+          userEmail:     submission.userId.email,
+          userName:      submission.userId.fullName,
+          advocateName:  req.advocate.fullName,
+          templateTitle: submission.title,
+          practiceArea:  submission.practiceArea,
+          category:      submission.category,
+          submissionId:  submission._id.toString(),
+          reason:        reason.trim(),
+        });
+        console.log("✅ Rejection email sent to user:", submission.userId.email);
+      }
+    } catch (emailErr) {
+      console.warn("⚠️ Rejection email failed (non-blocking):", emailErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Submission rejected successfully",
+      data: {
+        submissionId: submission._id,
+        status: submission.status,
+        rejectionReason: submission.rejectionReason,
+      },
+    });
+  } catch (error) {
+    console.error("rejectSubmission Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+
+module.exports = { createTemplate, getTemplates, getTemplateById, editTemplate, deleteTemplate, getFilledTemplates,acceptSubmission,rejectSubmission };

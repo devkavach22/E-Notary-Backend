@@ -815,6 +815,394 @@ const sendMeetingConfirmationToUser = async ({
     html:    message,
   });
 };
+
+// ═══════════════════════════════════════════════════════════
+// Template Submission Notification — Sent to Advocate
+// ═══════════════════════════════════════════════════════════
+const sendTemplateSubmissionEmail = async ({
+  advocateEmail,
+  advocateName,
+  userName,
+  userEmail,
+  userMobile,
+  templateTitle,
+  practiceArea,
+  category,
+  submissionId,
+  filledFields,
+}) => {
+  const fieldsRows = filledFields
+    .map(
+      (f) => `
+        <tr>
+          <td style="padding:10px 16px;font-size:14px;color:#333;font-weight:600;
+            border-bottom:1px solid #f0f0f0;background:#fafafa;width:40%;">
+            ${f.fieldName}
+          </td>
+          <td style="padding:10px 16px;font-size:14px;color:#1a237e;
+            border-bottom:1px solid #f0f0f0;">
+            ${f.value !== null && f.value !== undefined && String(f.value).trim() !== ""
+              ? String(f.value)
+              : "<em style='color:#aaa;'>—</em>"}
+          </td>
+        </tr>`
+    )
+    .join("");
+
+  const message = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>New Document Submission</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0"
+        style="background:#fff;border-radius:12px;overflow:hidden;
+        box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#1a237e,#283593);
+            padding:36px 40px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">
+              ⚖️ E-NOTARY
+            </h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;
+              letter-spacing:2px;text-transform:uppercase;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+
+        <!-- Icon -->
+        <tr>
+          <td align="center" style="padding:32px 40px 0;">
+            <span style="font-size:56px;">📄</span>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:20px 40px 10px;">
+            <h2 style="margin:0 0 10px;color:#1a1a1a;font-size:21px;">
+              New Document Submitted!
+            </h2>
+            <p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 20px;">
+              Dear <strong>${advocateName}</strong>,<br/>
+              A client has submitted a filled document on <strong>E-Notary</strong>
+              that requires your attention.
+            </p>
+
+            <!-- Template Info Card -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#f0f4ff;border:1px solid #c5cae9;
+              border-left:4px solid #1a237e;border-radius:8px;margin-bottom:20px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <p style="margin:0 0 6px;color:#1a237e;font-size:13px;
+                    font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+                    📋 Document Details
+                  </p>
+                  <p style="margin:0 0 4px;color:#333;font-size:14px;">
+                    <strong>Title:</strong> ${templateTitle}
+                  </p>
+                  <p style="margin:0 0 4px;color:#333;font-size:14px;">
+                    <strong>Case Type:</strong> ${practiceArea}
+                  </p>
+                  <p style="margin:0 0 4px;color:#333;font-size:14px;">
+                    <strong>Case Relation:</strong> ${category}
+                  </p>
+                  <p style="margin:0;color:#333;font-size:13px;font-family:monospace;">
+                    <strong>Submission ID:</strong> ${submissionId}
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Client Info Card -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#e8f4fd;border:1px solid #bbdefb;
+              border-left:4px solid #1565c0;border-radius:8px;margin-bottom:24px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <p style="margin:0 0 6px;color:#1565c0;font-size:13px;
+                    font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+                    👤 Client Information
+                  </p>
+                  <p style="margin:0 0 4px;color:#333;font-size:14px;">
+                    <strong>Name:</strong> ${userName}
+                  </p>
+                  <p style="margin:0 0 4px;color:#333;font-size:14px;">
+                    <strong>Email:</strong> ${userEmail}
+                  </p>
+                  <p style="margin:0;color:#333;font-size:14px;">
+                    <strong>Mobile:</strong> ${userMobile}
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Filled Fields Table -->
+            <p style="margin:0 0 10px;color:#555;font-size:14px;font-weight:700;">
+              📝 Submitted Field Values:
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;
+              margin-bottom:24px;">
+              <tr style="background:#1a237e;">
+                <td style="padding:10px 16px;font-size:13px;color:#fff;
+                  font-weight:700;width:40%;">Field</td>
+                <td style="padding:10px 16px;font-size:13px;color:#fff;
+                  font-weight:700;">Value</td>
+              </tr>
+              ${fieldsRows}
+            </table>
+
+            <!-- Note -->
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#fff8f0;border-left:4px solid #f5a623;
+                  border-radius:6px;padding:14px 16px;">
+                  <p style="margin:0;color:#7a5200;font-size:13px;line-height:1.6;">
+                    ⚠️ Please login to your <strong>E-Notary dashboard</strong>
+                    to review and process this submission at your earliest convenience.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:24px 0 0;color:#999;font-size:12px;text-align:center;">
+              This is an automated notification from E-Notary. Please do not reply.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9f9f9;padding:24px 40px;
+            text-align:center;border-top:1px solid #f0f0f0;">
+            <p style="margin:0 0 6px;color:#bbb;font-size:12px;">
+              © ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.
+            </p>
+            <p style="margin:0;color:#bbb;font-size:12px;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from: `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to: advocateEmail,
+    subject: `📄 New Document Submitted — ${userName} | ${templateTitle} | E-Notary`,
+    html: message,
+  });
+};
+
+// ═══════════════════════════════════════════════════════════
+// Template Accepted Email — Sent to User
+// ═══════════════════════════════════════════════════════════
+const sendTemplateAcceptedEmail = async ({
+  userEmail, userName, advocateName, templateTitle, practiceArea, category, submissionId,
+}) => {
+  const message = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+        style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#e8193c,#c0122e);padding:36px 40px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">⚖️ E-NOTARY</h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;letter-spacing:2px;text-transform:uppercase;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+        <tr><td align="center" style="padding:36px 40px 0;"><span style="font-size:56px;">✅</span></td></tr>
+        <tr>
+          <td style="padding:24px 40px 20px;text-align:center;">
+            <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:22px;">Document Accepted!</h2>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              Dear <strong>${userName}</strong>,<br/>
+              Great news! Your submitted document has been
+              <strong style="color:#27ae60;">accepted</strong> by <strong>${advocateName}</strong>.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#f0fff6;border:1px solid #b2dfdb;border-radius:10px;margin:20px 0;text-align:left;">
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Document</span><br/>
+                  <strong style="color:#333;">${templateTitle}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Case Type</span><br/>
+                  <strong style="color:#333;">${practiceArea}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Category</span><br/>
+                  <strong style="color:#333;">${category}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;">
+                  <span style="color:#888;font-size:13px;">Submission ID</span><br/>
+                  <strong style="color:#333;font-family:monospace;">${submissionId}</strong>
+                </td>
+              </tr>
+            </table>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#e8f4fd;border-left:4px solid #1565c0;border-radius:6px;padding:14px 16px;text-align:left;">
+                  <p style="margin:0;color:#1565c0;font-size:13px;line-height:1.6;">
+                    The advocate will contact you shortly to proceed further with your case.
+                  </p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:24px 0 0;color:#999;font-size:12px;">
+              This is an automated notification from E-Notary. Please do not reply.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9f9f9;padding:24px 40px;text-align:center;border-top:1px solid #f0f0f0;">
+            <p style="margin:0 0 6px;color:#bbb;font-size:12px;">© ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.</p>
+            <p style="margin:0;color:#bbb;font-size:12px;">India's Legal Execution Infrastructure</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from: `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to: userEmail,
+    subject: `✅ Document Accepted — ${templateTitle} | E-Notary`,
+    html: message,
+  });
+};
+
+// ═══════════════════════════════════════════════════════════
+// Template Rejected Email — Sent to User
+// ═══════════════════════════════════════════════════════════
+const sendTemplateRejectedEmail = async ({
+  userEmail, userName, advocateName, templateTitle, practiceArea, category, submissionId, reason,
+}) => {
+  const message = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+        style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#e8193c,#c0122e);padding:36px 40px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">⚖️ E-NOTARY</h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;letter-spacing:2px;text-transform:uppercase;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+        <tr><td align="center" style="padding:36px 40px 0;"><span style="font-size:56px;">❌</span></td></tr>
+        <tr>
+          <td style="padding:24px 40px 20px;text-align:center;">
+            <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:22px;">Document Not Accepted</h2>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              Dear <strong>${userName}</strong>,<br/>
+              We regret to inform you that your submitted document has been
+              <strong style="color:#e8193c;">rejected</strong> by <strong>${advocateName}</strong>.
+            </p>
+            <!-- Document Info -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:10px;margin:16px 0;text-align:left;">
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Document</span><br/>
+                  <strong style="color:#333;">${templateTitle}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #e0e0e0;">
+                  <span style="color:#888;font-size:13px;">Case Type</span><br/>
+                  <strong style="color:#333;">${practiceArea}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;">
+                  <span style="color:#888;font-size:13px;">Submission ID</span><br/>
+                  <strong style="color:#333;font-family:monospace;">${submissionId}</strong>
+                </td>
+              </tr>
+            </table>
+            <!-- Reason -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+              <tr>
+                <td style="background:#fff5f5;border:1px solid #ffcccc;border-left:4px solid #e8193c;
+                  border-radius:8px;padding:16px 20px;text-align:left;">
+                  <p style="margin:0 0 8px;color:#c0122e;font-size:13px;font-weight:bold;
+                    text-transform:uppercase;letter-spacing:1px;">Reason for Rejection:</p>
+                  <p style="margin:0;color:#333;font-size:15px;line-height:1.6;">${reason}</p>
+                </td>
+              </tr>
+            </table>
+            <!-- What to do -->
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#fff8f0;border-left:4px solid #f5a623;border-radius:6px;
+                  padding:14px 16px;text-align:left;">
+                  <p style="margin:0 0 6px;color:#7a5200;font-size:13px;font-weight:bold;">📌 What you can do:</p>
+                  <p style="margin:0 0 4px;color:#555;font-size:14px;">• Review the reason above and correct your submission</p>
+                  <p style="margin:0 0 4px;color:#555;font-size:14px;">• Re-submit the document with updated information</p>
+                  <p style="margin:0;color:#555;font-size:14px;">• Contact the advocate if you need clarification</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:24px 0 0;color:#999;font-size:12px;">
+              This is an automated notification from E-Notary. Please do not reply.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9f9f9;padding:24px 40px;text-align:center;border-top:1px solid #f0f0f0;">
+            <p style="margin:0 0 6px;color:#bbb;font-size:12px;">© ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.</p>
+            <p style="margin:0;color:#bbb;font-size:12px;">India's Legal Execution Infrastructure</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from: `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to: userEmail,
+    subject: `❌ Document Not Accepted — ${templateTitle} | E-Notary`,
+    html: message,
+  });
+};
+
 module.exports = {
   generateOTP,
   sendOTPEmail,
@@ -824,5 +1212,8 @@ module.exports = {
   sendForgetPasswordOTP,
   sendBookingEmailToUser,
   sendBookingEmailToAdvocate,
-  sendMeetingConfirmationToUser
+  sendMeetingConfirmationToUser,
+  sendTemplateSubmissionEmail,
+   sendTemplateAcceptedEmail,
+  sendTemplateRejectedEmail,
 };

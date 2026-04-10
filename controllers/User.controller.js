@@ -208,7 +208,7 @@ const cleanFieldsForResponse = (fields) =>
   });
 
 
-const { generateOTP, sendOTPEmail } = require("./sendOTP");
+const { generateOTP, sendOTPEmail, sendTemplateSubmissionEmail } = require("./sendOTP");
 
 const sendOTP = async (req, res) => {
   try {
@@ -806,6 +806,29 @@ const fillTemplate = async (req, res) => {
       status: "submitted",
     });
 
+    try {
+      const advocate = await Advocate.findById(template.advocateId).select("email fullName");
+      const user = await User.findById(req.user._id).select("fullName email mobile");
+
+      if (advocate && user) {
+        await sendTemplateSubmissionEmail({
+          advocateEmail: advocate.email,
+          advocateName: advocate.fullName,
+          userName: user.fullName,
+          userEmail: user.email,
+          userMobile: user.mobile,
+          templateTitle: template.title,
+          practiceArea: template.practiceArea,
+          category: template.category,
+          submissionId: filledTemplate._id.toString(),
+          filledFields: enrichedFields,
+        });
+        console.log("✅ Template submission email sent to advocate:", advocate.email);
+      }
+    } catch (emailErr) {
+      console.warn("⚠️ Template submission email failed (non-blocking):", emailErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Template submitted successfully",
@@ -825,10 +848,10 @@ const downloadFilledTemplate = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid submission ID" });
 
     const submission = await UserFilledTemplate.findOne({
-      _id:    submissionId,
+      _id: submissionId,
       userId: req.user._id,
     })
-      .populate("userId",     "fullName email mobile")
+      .populate("userId", "fullName email mobile")
       .populate("templateId", "title practiceArea category");
 
     if (!submission)
@@ -840,13 +863,13 @@ const downloadFilledTemplate = async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="submission_${submissionId}.pdf"`);
     doc.pipe(res);
 
-    const DARK_BLUE  = "#1a3c5e";
-    const WHITE      = "#ffffff";
+    const DARK_BLUE = "#1a3c5e";
+    const WHITE = "#ffffff";
     const LIGHT_GRAY = "#f5f7fa";
-    const BORDER     = "#e0e4ea";
-    const TEXT_DARK  = "#1a1a2e";
+    const BORDER = "#e0e4ea";
+    const TEXT_DARK = "#1a1a2e";
     const TEXT_MUTED = "#6b7280";
-    const GREEN_BG   = "#e1f5ee";
+    const GREEN_BG = "#e1f5ee";
     const GREEN_TEXT = "#0f6e56";
 
     const pageW = doc.page.width;
@@ -872,12 +895,12 @@ const downloadFilledTemplate = async (req, res) => {
     const totalBadgeW = b1W + b2W + 10;
     const badgeStartX = (pageW - totalBadgeW) / 2;
 
-    doc.roundedRect(badgeStartX,          badgeY, b1W, 18, 9).fillOpacity(0.15).fill(WHITE);
+    doc.roundedRect(badgeStartX, badgeY, b1W, 18, 9).fillOpacity(0.15).fill(WHITE);
     doc.roundedRect(badgeStartX + b1W + 10, badgeY, b2W, 18, 9).fillOpacity(0.1).fill(WHITE);
     doc.fillOpacity(1);
 
-    doc.fillColor("#e8f4ff").text(badge1, badgeStartX + 10,          badgeY + 4, { lineBreak: false });
-    doc.fillColor("#c8e0f8").text(badge2, badgeStartX + b1W + 20,    badgeY + 4, { lineBreak: false });
+    doc.fillColor("#e8f4ff").text(badge1, badgeStartX + 10, badgeY + 4, { lineBreak: false });
+    doc.fillColor("#c8e0f8").text(badge2, badgeStartX + b1W + 20, badgeY + 4, { lineBreak: false });
 
     // ── User card ────────────────────────────────────────
     const cardY = 125;
@@ -924,7 +947,7 @@ const downloadFilledTemplate = async (req, res) => {
     submission.filledFields.forEach((field) => {
       const labelW = 170;
       const valueW = contentW - labelW;
-      const rowH   = 28;
+      const rowH = 28;
 
       // Label cell (dark blue)
       doc.rect(margin, currentY, labelW, rowH).fill(DARK_BLUE);
