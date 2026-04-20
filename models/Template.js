@@ -29,6 +29,24 @@ const fieldSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const partySchema = new mongoose.Schema(
+  {
+    partyName: {
+      type: String,
+      required: [true, "Party name is required"],
+      trim: true,
+    },
+    fields: {
+      type: [fieldSchema],
+      validate: {
+        validator: (fields) => fields.length > 0,
+        message: "Each party must have at least one field",
+      },
+    },
+  },
+  { _id: false }
+);
+
 const templateSchema = new mongoose.Schema(
   {
     advocateId: {
@@ -61,13 +79,20 @@ const templateSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    fields: {
-      type: [fieldSchema],
+    parties: {
+      type: [partySchema],
       validate: {
-        validator: (fields) => fields.length > 0,
-        message: "At least one field is required",
+        validator: (parties) => parties.length > 0,
+        message: "At least one party is required",
       },
     },
+
+    // ── Added: stores HTML from document editor (filled during edit only) ──
+    templateLayout: {
+      type: String,
+      default: "",
+    },
+
     isActive: {
       type: Boolean,
       default: true,

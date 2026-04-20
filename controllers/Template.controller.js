@@ -27,66 +27,61 @@ const cleanFieldsForResponse = (fields) =>
         return field;
     });
 
-const validateFields = (fields) => {
+const validateFields = (fields, partyLabel = "") => {
     for (let i = 0; i < fields.length; i++) {
         const field = fields[i];
-        if (!field.fieldName?.trim()) return `Field ${i + 1}: fieldName is required`;
-        if (!field.fieldType) return `Field ${i + 1} "${field.fieldName}": fieldType is required`;
+        const prefix = partyLabel ? `Party "${partyLabel}", Field ${i + 1}` : `Field ${i + 1}`;
+        if (!field.fieldName?.trim()) return `${prefix}: fieldName is required`;
+        if (!field.fieldType) return `${prefix} "${field.fieldName}": fieldType is required`;
         if (!VALID_FIELD_TYPES.includes(field.fieldType))
-            return `Field ${i + 1} "${field.fieldName}": Invalid fieldType.`;
+            return `${prefix} "${field.fieldName}": Invalid fieldType.`;
         if (field.fieldType === "dropdown") {
             if (!field.options || !Array.isArray(field.options) || field.options.length === 0)
-                return `Field "${field.fieldName}" (dropdown) requires options`;
+                return `${prefix} "${field.fieldName}" (dropdown) requires options`;
         }
     }
     return null;
 };
 
+const validateParties = (parties) => {
+    if (!Array.isArray(parties) || parties.length === 0)
+        return "At least one party is required";
 
+    for (let i = 0; i < parties.length; i++) {
+        const party = parties[i];
+        if (!party.partyName?.trim()) return `Party ${i + 1}: partyName is required`;
+        if (!Array.isArray(party.fields) || party.fields.length === 0)
+            return `Party "${party.partyName}": at least one field is required`;
 
-// ── GET TEMPLATES ────────────────────────────────────────────
-const getTemplates = async (req, res) => {
-    try {
-        const advocateId = req.advocate._id;
-        const { practiceArea, category, isActive, page = 1, limit = 10 } = req.query;
-
-        const filter = { advocateId };
-        if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
-        if (category?.trim()) filter.category = category.trim();
-        if (isActive !== undefined) filter.isActive = isActive === "true";
-
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-
-        const [templates, total] = await Promise.all([
-            Template.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)).select("-__v"),
-            Template.countDocuments(filter),
-        ]);
-
-        const data = templates.map((t) => ({
-            ...t.toObject(),
-            fields: cleanFieldsForResponse(t.fields),
-        }));
-
-        return res.status(200).json({
-            success: true,
-            data,
-            pagination: {
-                total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                totalPages: Math.ceil(total / parseInt(limit)),
-            },
-        });
-    } catch (error) {
-        console.error("getTemplates Error:", error);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+        const fieldError = validateFields(party.fields, party.partyName);
+        if (fieldError) return fieldError;
     }
+
+    // Duplicate party name check
+    const names = parties.map((p) => p.partyName.trim().toLowerCase());
+    const hasDupe = names.some((n, i) => names.indexOf(n) !== i);
+    if (hasDupe) return "Duplicate party names are not allowed";
+
+    return null;
 };
+
+const formatParties = (parties) =>
+    parties.map((p) => ({
+        partyName: p.partyName.trim(),
+        fields: formatFields(p.fields),
+    }));
+
+const cleanPartiesForResponse = (parties) =>
+    parties.map((p) => ({
+        partyName: p.partyName,
+        fields: cleanFieldsForResponse(p.fields),
+    }));
+
 
 // ── CREATE TEMPLATE ──────────────────────────────────────────
 const createTemplate = async (req, res) => {
     try {
-        const { practiceArea, category, title, description, fields } = req.body;
+        const { practiceArea, category, title, description, parties } = req.body;
         const advocateId = req.advocate._id;
 
         const advocate = await Advocate.findById(advocateId).select("fullName approvalStatus isActive practiceAreas categories");
@@ -124,12 +119,9 @@ const createTemplate = async (req, res) => {
         });
         if (existing) return res.status(409).json({ success: false, message: "Template with this title already exists" });
 
-        // ── Fields validation ───────────────────────────────
-        if (!fields || !Array.isArray(fields) || fields.length === 0)
-            return res.status(400).json({ success: false, message: "At least one field is required" });
-
-        const fieldError = validateFields(fields);
-        if (fieldError) return res.status(400).json({ success: false, message: fieldError });
+        // ── Parties validation ──────────────────────────────
+        const partyError = validateParties(parties);
+        if (partyError) return res.status(400).json({ success: false, message: partyError });
 
         const template = await Template.create({
             advocateId,
@@ -138,17 +130,57 @@ const createTemplate = async (req, res) => {
             category: category.trim(),
             title: title.trim(),
             description: description?.trim() || "",
-            fields: formatFields(fields),
+            parties: formatParties(parties),
         });
 
         return res.status(201).json({
             success: true,
             message: "Template created successfully",
-            data: { ...template.toObject(), fields: cleanFieldsForResponse(template.fields) },
+            data: { ...template.toObject(), parties: cleanPartiesForResponse(template.parties) },
         });
 
     } catch (error) {
         console.error("createTemplate Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+// ── GET TEMPLATES ────────────────────────────────────────────
+const getTemplates = async (req, res) => {
+    try {
+        const advocateId = req.advocate._id;
+        const { practiceArea, category, isActive, page = 1, limit = 10 } = req.query;
+
+        const filter = { advocateId };
+        if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
+        if (category?.trim()) filter.category = category.trim();
+        if (isActive !== undefined) filter.isActive = isActive === "true";
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const [templates, total] = await Promise.all([
+            Template.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)).select("-__v"),
+            Template.countDocuments(filter),
+        ]);
+
+        const data = templates.map((t) => ({
+            ...t.toObject(),
+            parties: cleanPartiesForResponse(t.parties),  // ← changed from fields
+        }));
+
+        return res.status(200).json({
+            success: true,
+            data,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / parseInt(limit)),
+            },
+        });
+
+    } catch (error) {
+        console.error("getTemplates Error:", error);
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
@@ -159,6 +191,20 @@ const editTemplate = async (req, res) => {
         const { templateId } = req.params;
         const advocateId = req.advocate._id;
 
+        // ── Log incoming request data ───────────────────────
+        console.log("═══════════════════════════════════════════");
+        console.log("📥 editTemplate HIT");
+        console.log("📌 templateId (params)  :", templateId);
+        console.log("📦 req.body             :", JSON.stringify(req.body, null, 2));
+        console.log("📝 practiceArea         :", req.body.practiceArea);
+        console.log("📝 category             :", req.body.category);
+        console.log("📝 title                :", req.body.title);
+        console.log("📝 description          :", req.body.description);
+        console.log("📝 isActive             :", req.body.isActive);
+        console.log("📝 templateLayout       :", req.body.templateLayout);
+        console.log("👥 parties              :", JSON.stringify(req.body.parties, null, 2));
+        console.log("═══════════════════════════════════════════");
+
         if (!mongoose.Types.ObjectId.isValid(templateId))
             return res.status(400).json({ success: false, message: "Invalid template ID" });
 
@@ -168,12 +214,20 @@ const editTemplate = async (req, res) => {
         const template = await Template.findOne({ _id: templateId, advocateId });
         if (!template) return res.status(404).json({ success: false, message: "Template not found" });
 
-        const { practiceArea, category, title, description, fields, isActive } = req.body;
+        // ── Log existing template from DB ───────────────────
+        console.log("📂 Existing template from DB:");
+        console.log("   title          :", template.title);
+        console.log("   practiceArea   :", template.practiceArea);
+        console.log("   category       :", template.category);
+        console.log("   templateLayout :", template.templateLayout);
+        console.log("   parties        :", JSON.stringify(template.parties, null, 2));
+        console.log("═══════════════════════════════════════════");
+
+        const { practiceArea, category, title, description, parties, isActive, templateLayout } = req.body;
 
         if (practiceArea !== undefined) {
             if (!practiceArea?.trim()) return res.status(400).json({ success: false, message: "Practice area cannot be empty" });
 
-            // ── Advocate practiceArea validation ────────────
             if (!advocate.practiceAreas.includes(practiceArea.trim())) {
                 return res.status(403).json({
                     success: false,
@@ -186,7 +240,6 @@ const editTemplate = async (req, res) => {
         if (category !== undefined) {
             if (!category?.trim()) return res.status(400).json({ success: false, message: "Category cannot be empty" });
 
-            // ── Advocate category validation ─────────────────
             if (!advocate.categories.includes(category.trim())) {
                 return res.status(403).json({
                     success: false,
@@ -214,29 +267,53 @@ const editTemplate = async (req, res) => {
         if (description !== undefined) template.description = description?.trim() || "";
         if (isActive !== undefined) template.isActive = Boolean(isActive);
 
-        if (fields !== undefined) {
-            if (!Array.isArray(fields) || fields.length === 0)
-                return res.status(400).json({ success: false, message: "Fields cannot be empty" });
+        // ── Parties update ──────────────────────────────────
+        if (parties !== undefined) {
+            console.log("🔄 Processing parties update...");
+            const partyError = validateParties(parties);
+            if (partyError) return res.status(400).json({ success: false, message: partyError });
 
-            const fieldError = validateFields(fields);
-            if (fieldError) return res.status(400).json({ success: false, message: fieldError });
+            const existingPartyNames = new Set(template.parties.map((p) => p.partyName.toLowerCase()));
 
-            const existingNames = new Set(template.fields.map((f) => f.fieldName.toLowerCase()));
-            const newFields = formatFields(fields).filter((f) => !existingNames.has(f.fieldName.toLowerCase()));
+            for (const incomingParty of formatParties(parties)) {
+                const partyNameKey = incomingParty.partyName.toLowerCase();
 
-            if (newFields.length === 0) return res.status(400).json({ success: false, message: "All provided fields already exist in this template" });
-            template.fields = [...template.fields, ...newFields];
+                if (existingPartyNames.has(partyNameKey)) {
+                    console.log(`   ✅ Party "${incomingParty.partyName}" exists → merging new fields`);
+                    const existingParty = template.parties.find(
+                        (p) => p.partyName.toLowerCase() === partyNameKey
+                    );
+                    const existingFieldNames = new Set(existingParty.fields.map((f) => f.fieldName.toLowerCase()));
+                    const newFields = incomingParty.fields.filter((f) => !existingFieldNames.has(f.fieldName.toLowerCase()));
+                    console.log(`   ➕ New fields added to "${incomingParty.partyName}":`, newFields.map((f) => f.fieldName));
+                    existingParty.fields = [...existingParty.fields, ...newFields];
+                } else {
+                    console.log(`   🆕 New party "${incomingParty.partyName}" → adding entirely`);
+                    template.parties.push(incomingParty);
+                }
+            }
+        }
+
+        // ── Template layout update (edit only) ─────────────
+        if (templateLayout !== undefined) {
+            console.log("🖊️  templateLayout received → saving...");
+            console.log("   layout value:", templateLayout);
+            template.templateLayout = templateLayout?.trim() || "";
         }
 
         await template.save();
+
+        console.log("✅ Template saved successfully");
+        console.log("═══════════════════════════════════════════");
+
         return res.status(200).json({
             success: true,
             message: "Template updated successfully",
-            data: { ...template.toObject(), fields: cleanFieldsForResponse(template.fields) },
+            data: { ...template.toObject(), parties: cleanPartiesForResponse(template.parties) },
         });
 
     } catch (error) {
-        console.error("editTemplate Error:", error);
+        console.error("❌ editTemplate Error:", error);
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
