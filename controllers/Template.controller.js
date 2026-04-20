@@ -382,7 +382,7 @@ const acceptSubmission = async (req, res) => {
 const rejectSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const { reason } = req.body;
+    const { reason } = req.body; // ✅ body se lo
     const advocateId = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(submissionId))
@@ -408,10 +408,9 @@ const rejectSubmission = async (req, res) => {
       });
 
     submission.status = "rejected";
-    submission.rejectionReason = reason.trim();
+    submission.rejectionReason = reason.trim(); // ✅ body wala reason save hoga
     await submission.save();
 
-    // Send rejection email to user (non-blocking)
     try {
       if (submission.userId?.email) {
         await sendTemplateRejectedEmail({
@@ -422,7 +421,7 @@ const rejectSubmission = async (req, res) => {
           practiceArea:  submission.practiceArea,
           category:      submission.category,
           submissionId:  submission._id.toString(),
-          reason:        reason.trim(),
+          reason:        reason.trim(), // ✅ same reason email mein bhi
         });
         console.log("✅ Rejection email sent to user:", submission.userId.email);
       }
@@ -444,6 +443,86 @@ const rejectSubmission = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+// ── Date Helper ──────────────────────────────────────────────
+const formatDate = (date) => new Date(date).toISOString().split("T")[0];
 
+// ── ADVOCATE DASHBOARD ───────────────────────────────────────
+const getAdvocateDashboard = async (req, res) => {
+  try {
+    const advocateId = req.advocate._id;
 
-module.exports = { createTemplate, getTemplates, getTemplateById, editTemplate, deleteTemplate, getFilledTemplates,acceptSubmission,rejectSubmission };
+    const [
+      totalTemplates,
+      totalUsers,
+      pendingSubmissions,
+      acceptedSubmissions,
+      rejectedSubmissions,
+      advocate,
+    ] = await Promise.all([
+      Template.countDocuments({ advocateId }),
+      UserFilledTemplate.distinct("userId", { advocateId }),
+      UserFilledTemplate.find({ advocateId, status: "submitted" })
+        .populate("userId", "fullName")
+        .select("title practiceArea category userId createdAt")
+        .sort({ createdAt: -1 }),
+      UserFilledTemplate.find({ advocateId, status: "accepted" })
+        .populate("userId", "fullName")
+        .select("title practiceArea category userId createdAt updatedAt")
+        .sort({ updatedAt: -1 }),
+      UserFilledTemplate.find({ advocateId, status: "rejected" })
+        .populate("userId", "fullName")
+        .select("title practiceArea category userId rejectionReason createdAt updatedAt")
+        .sort({ updatedAt: -1 }),
+      Advocate.findById(advocateId).select("fullName createdAt"),
+    ]);
+
+ return res.status(200).json({
+      success: true,
+      data: {
+        advocate: {
+          name:     advocate.fullName,
+          joinDate: formatDate(advocate.createdAt), // ✅
+        },
+        stats: {
+          totalTemplates: totalTemplates,
+          totalUsers:     totalUsers.length,
+          totalPending:   pendingSubmissions.length,
+          totalAccepted:  acceptedSubmissions.length,
+          totalRejected:  rejectedSubmissions.length,
+        },
+        pending: pendingSubmissions.map((s) => ({
+          submissionId: s._id,
+          title:        s.title,
+          practiceArea: s.practiceArea,
+          category:     s.category,
+          userName:     s.userId?.fullName || "N/A",
+          submitDate:   formatDate(s.createdAt), // ✅
+        })),
+        accepted: acceptedSubmissions.map((s) => ({
+          submissionId: s._id,
+          title:        s.title,
+          practiceArea: s.practiceArea,
+          category:     s.category,
+          userName:     s.userId?.fullName || "N/A",
+          submitDate:   formatDate(s.createdAt), // ✅
+          acceptDate:   formatDate(s.updatedAt), // ✅
+        })),
+        rejected: rejectedSubmissions.map((s) => ({
+          submissionId:    s._id,
+          title:           s.title,
+          practiceArea:    s.practiceArea,
+          category:        s.category,
+          userName:        s.userId?.fullName || "N/A",
+          rejectionReason: s.rejectionReason,
+          submitDate:      formatDate(s.createdAt), // ✅
+          rejectedDate:    formatDate(s.updatedAt), // ✅
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("getAdvocateDashboard Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+module.exports = { createTemplate, getTemplates, getTemplateById, editTemplate, deleteTemplate, getFilledTemplates,acceptSubmission,rejectSubmission ,getAdvocateDashboard};

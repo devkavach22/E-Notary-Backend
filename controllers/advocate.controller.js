@@ -466,6 +466,7 @@ const getLoginAdvocate = async (req, res) => {
   }
 };
 
+
 module.exports = {
   sendOTP,
   verifyOTP,
@@ -474,4 +475,5 @@ module.exports = {
   registerAdvocate,
   getPracticeAreas,
   getLoginAdvocate,
+  
 };

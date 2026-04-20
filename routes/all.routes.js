@@ -13,7 +13,8 @@ const {
   deleteTemplate,
   getFilledTemplates,
   rejectSubmission,
-  acceptSubmission
+  acceptSubmission,
+  getAdvocateDashboard
 } = require("../controllers/Template.controller");
 
 const { login, sendForgetPasswordOtp, confirmPassword } = require("../controllers/Auth.controller");
@@ -54,6 +55,7 @@ router.post("/confirm-password", confirmPassword);
 router.post("/register", advocateUpload, handleUploadError, registerAdvocate);
 router.get("/advocates/practice-areas", getPracticeAreas);
 router.get("/advocate/me", advocateAuth, getLoginAdvocate);
+router.get("/advocate/dashboard", advocateAuth, getAdvocateDashboard);
  
 
 router.post  ("/create/template",        advocateAuth, createTemplate);
@@ -64,7 +66,7 @@ router.delete("/template/:templateId",   advocateAuth, deleteTemplate);
 router.get   ("/userfilled-templates",      advocateAuth, getFilledTemplates);
 
 router.patch("/submissions/:submissionId/accept", advocateAuth, acceptSubmission);
-router.patch("/submissions/:submissionId/reject", advocateAuth, rejectSubmission);
+router.put("/submissions/:submissionId/reject", advocateAuth, rejectSubmission);
 
 router.post("/user/verify-documents", userUpload, handleUploadError, UserverifyDocuments);
 router.post("/user/register", userUpload, handleUploadError, registerUser);
