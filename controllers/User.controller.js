@@ -364,6 +364,7 @@ const fillTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
     const { filledFields } = req.body;
+
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
 
@@ -377,9 +378,14 @@ const fillTemplate = async (req, res) => {
     if (!Array.isArray(filledFields) || filledFields.length === 0)
       return res.status(400).json({ success: false, message: "filledFields are required" });
 
-    const missingFields = [];
+    // ── Collect all fields (top-level + from parties) ───
+    const allTemplateFields = [
+      ...template.fields,
+      ...template.parties.flatMap((p) => p.fields),
+    ];
 
-    for (const templateField of template.fields) {
+    const missingFields = [];
+    for (const templateField of allTemplateFields) {
       if (templateField.required) {
         const userField = filledFields.find(
           (f) => f.fieldName.trim().toLowerCase() === templateField.fieldName.trim().toLowerCase()
@@ -389,7 +395,6 @@ const fillTemplate = async (req, res) => {
           userField.value === null ||
           userField.value === undefined ||
           String(userField.value).trim() === "";
-
         if (isEmpty) missingFields.push(templateField.fieldName);
       }
     }
@@ -401,7 +406,7 @@ const fillTemplate = async (req, res) => {
       });
 
     const enrichedFields = filledFields.map((userField) => {
-      const templateField = template.fields.find(
+      const templateField = allTemplateFields.find(
         (f) => f.fieldName.trim().toLowerCase() === userField.fieldName.trim().toLowerCase()
       );
       return {
@@ -410,6 +415,27 @@ const fillTemplate = async (req, res) => {
         value: userField.value,
       };
     });
+
+    // ── Duplicate submission check ──────────────────────
+    const existing = await UserFilledTemplate.findOne({
+      templateId: template._id,
+      userId: req.user._id,
+      status: { $in: ["submitted", "approved"] },
+      filledFields: {
+        $all: enrichedFields.map((f) => ({
+          $elemMatch: {
+            fieldName: f.fieldName,
+            value: String(f.value).trim(),
+          },
+        })),
+      },
+    });
+
+    if (existing)
+      return res.status(409).json({
+        success: false,
+        message: "You have already submitted this form with the same details.",
+      });
 
     const filledTemplate = await UserFilledTemplate.create({
       templateId: template._id,
@@ -425,7 +451,6 @@ const fillTemplate = async (req, res) => {
     try {
       const advocate = await Advocate.findById(template.advocateId).select("email fullName");
       const user = await User.findById(req.user._id).select("fullName email mobile");
-
       if (advocate && user) {
         await sendTemplateSubmissionEmail({
           advocateEmail: advocate.email,
@@ -450,6 +475,7 @@ const fillTemplate = async (req, res) => {
       message: "Template submitted successfully",
       data: filledTemplate,
     });
+
   } catch (error) {
     console.error("fillTemplate Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });

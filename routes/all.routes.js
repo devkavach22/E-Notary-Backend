@@ -31,7 +31,7 @@ const {
   getAllUsers, getUserDetails, getPendingAdvocates
 } = require("../controllers/Admin.controller");
 const { adminAuth, userAuth, advocateAuth } = require("../middlewares/Auth.middleware");
-
+const{getUserCases} =require("../controllers/Booking.controller")
 
 
 router.post("/send-otp", sendOTP);
@@ -65,6 +65,9 @@ router.get("/user/advocates",userAuth, getAdvocatesForUser);
 router.get("/user/advocate/:advocateId/templates", userAuth, getTemplatesForUser);
 router.post("/templates/:templateId/fill", userAuth, fillTemplate);
 router.get("/template/download/:submissionId", userAuth, downloadFilledTemplate);
+router.get("/user/mybooking", userAuth, getUserCases);
+
+
 
 router.get("/admin/advocates",         adminAuth, getAllAdvocates);
 router.get("/admin/users",             adminAuth, getAllUsers);
@@ -77,6 +80,7 @@ router.put("/admin/advocate/:id/reject",  adminAuth, rejectAdvocate);
 router.get("/admin/user/:id",             adminAuth, getUserDetails);
 router.get("/admin/advocate/:id",         adminAuth, getAdvocateDetails);
 router.get("/user/:id", getUserById);
+
 
 
 
