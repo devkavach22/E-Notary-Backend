@@ -38,10 +38,6 @@ const partySchema = new mongoose.Schema(
     },
     fields: {
       type: [fieldSchema],
-      validate: {
-        validator: (fields) => fields.length > 0,
-        message: "Each party must have at least one field",
-      },
     },
   },
   { _id: false }
@@ -81,18 +77,16 @@ const templateSchema = new mongoose.Schema(
     },
     parties: {
       type: [partySchema],
-      validate: {
-        validator: (parties) => parties.length > 0,
-        message: "At least one party is required",
-      },
+      default: [],
     },
-
-    // ── Added: stores HTML from document editor (filled during edit only) ──
+    fields: {
+      type: [fieldSchema],
+      default: [],
+    },
     templateLayout: {
       type: String,
       default: "",
     },
-
     isActive: {
       type: Boolean,
       default: true,
