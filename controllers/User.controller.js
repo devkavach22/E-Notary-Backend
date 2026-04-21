@@ -262,29 +262,31 @@ const getAdvocatesForUser = async (req, res) => {
       .sort({ createdAt: -1 });
 
     if (advocates.length === 0) {
-  return res.status(404).json({
-    success: false,
-    message: "No advocates found for the selected Values.",
-  });
-}
+      return res.status(404).json({
+        success: false,
+        message: "No advocates found for the selected Values.",
+      });
+    }
 
     // ── Filter out advocates who have no templates ─────────
     const advocateIds = advocates.map((a) => a._id);
 
-    const templatesWithAdvocates = await Template.distinct("createdBy", {
-      createdBy: { $in: advocateIds },
+
+    const templatesWithAdvocates = await Template.distinct("advocateId", {
+      advocateId: { $in: advocateIds },
     });
+
 
     const filteredAdvocates = advocates.filter((a) =>
       templatesWithAdvocates.some((id) => id.toString() === a._id.toString())
     );
 
-   if (filteredAdvocates.length === 0) {
-  return res.status(404).json({
-    success: false,
-    message: "No advocates found for the selected Values.",
-  });
-}
+    if (filteredAdvocates.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No advocates found for the selected Values.",
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -293,7 +295,7 @@ const getAdvocatesForUser = async (req, res) => {
         ...(category && category.trim().toLowerCase() !== "all" && { category: category.trim() }),
       },
       total: filteredAdvocates.length,
-      data:  filteredAdvocates,
+      data: filteredAdvocates,
     });
 
   } catch (error) {
