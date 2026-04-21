@@ -99,6 +99,7 @@ const login = async (req, res) => {
           fullName:       user.fullName,
           approvalStatus: user.approvalStatus,
           practiceAreas:  user.practiceAreas,
+          category: user.categories,
         }),
         ...(role === "user" && {
           fullName: user.fullName,
