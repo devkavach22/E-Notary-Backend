@@ -24,7 +24,6 @@ const {
   handleUploadError,
 } = require("../middlewares/upload.middleware");
 const { UserverifyDocuments, registerUser, getUserById, getAdvocatesForUser,getTemplatesForUser,fillTemplate,downloadFilledTemplate } = require("../controllers/User.controller");
-const { bookAdvocate, getUserBookings } = require("../controllers/Booking.controller");
 const {
   getAllAdvocates, getAdvocateDetails,
   verifyAdvocateDocuments,
@@ -33,15 +32,7 @@ const {
 } = require("../controllers/Admin.controller");
 const { adminAuth, userAuth, advocateAuth } = require("../middlewares/Auth.middleware");
 
-const {
-  getPendingBookings, getAllBookings,
-  confirmBooking, cancelBooking, getVideoCallRoom,
-} = require("../controllers/AdvocateBooking.controller");
 
-const {
-  saveNote, getNote, downloadNote,
-  uploadRecording, getRecordings, downloadRecording,
-} = require("../controllers/MeetingData.controller");
 
 router.post("/send-otp", sendOTP);
 router.post("/verify-otp", verifyOTP);
@@ -79,8 +70,6 @@ router.get("/admin/advocates",         adminAuth, getAllAdvocates);
 router.get("/admin/users",             adminAuth, getAllUsers);
 router.get("/admin/advocates/pending", adminAuth, getPendingAdvocates);
 
-router.post("/user/book-advocate", userAuth, bookAdvocate);
-router.get("/user/bookings",       userAuth, getUserBookings);
 
 router.put("/admin/advocate/:id/verify",  adminAuth, verifyAdvocateDocuments);
 router.put("/admin/advocate/:id/approve", adminAuth, approveAdvocate);
@@ -89,26 +78,9 @@ router.get("/admin/user/:id",             adminAuth, getUserDetails);
 router.get("/admin/advocate/:id",         adminAuth, getAdvocateDetails);
 router.get("/user/:id", getUserById);
 
-router.get("/advocate/bookings/pending",            advocateAuth, getPendingBookings);
-router.get("/advocate/bookings",                    advocateAuth, getAllBookings);
-router.put("/advocate/bookings/:bookingId/confirm", advocateAuth, confirmBooking);
-router.put("/advocate/bookings/:bookingId/cancel",  advocateAuth, cancelBooking);
 
-router.get("/video-call/:roomId", isUserOrAdvocate, getVideoCallRoom);
 
-router.post("/meeting/notes",                    isUserOrAdvocate, saveNote);
-router.get("/meeting/notes/:bookingId",          isUserOrAdvocate, getNote);
-router.get("/meeting/notes/:bookingId/download", isUserOrAdvocate, downloadNote);
 
-router.post(
-  "/meeting/recording/upload",
-  isUserOrAdvocate,
-  (req, res, next) => recordingUpload(req, res, (err) => err ? next(err) : next()),
-  handleUploadError,
-  uploadRecording
-);
-router.get("/meeting/recordings/:bookingId",           isUserOrAdvocate, getRecordings);
-router.get("/meeting/recording/:recordingId/download", isUserOrAdvocate, downloadRecording);
 
 
 function isUserOrAdvocate(req, res, next) {
