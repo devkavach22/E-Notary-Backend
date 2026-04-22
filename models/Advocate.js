@@ -1,12 +1,12 @@
 const mongoose = require("mongoose");
-const bcrypt   = require("bcryptjs");
+const bcrypt = require("bcryptjs");
 
 const advocateSchema = new mongoose.Schema(
   {
-    fullName:    { type: String, required: [true, "Full name is required"], trim: true },
-    dateOfBirth: { type: Date,   required: [true, "Date of birth is required"] },
-    gender:      { type: String, enum: ["male", "female", "other"], required: [true, "Gender is required"] },
-
+    fullName: { type: String, required: [true, "Full name is required"], trim: true },
+    dateOfBirth: { type: Date, required: [true, "Date of birth is required"] },
+    gender: { type: String, enum: ["male", "female", "other"], required: [true, "Gender is required"] },
+    profilePicAdvocate: { type: String, default: null },
     mobile: {
       type: String, required: [true, "Mobile number is required"],
       unique: true, trim: true, match: [/^[6-9]\d{9}$/, "Invalid mobile number"],
@@ -33,22 +33,22 @@ const advocateSchema = new mongoose.Schema(
       uppercase: true,
       match: [/^[A-Z]{1,4}\/\d{1,6}\/\d{4}$/, "Invalid Bar Council number format. Expected: STATE/NUMBER/YEAR (e.g. D/123/2020)"],
     },
-    barCouncilState:  { type: String, required: [true, "Bar Council state is required"], trim: true },
+    barCouncilState: { type: String, required: [true, "Bar Council state is required"], trim: true },
     yearOfEnrollment: {
       type: Number, required: [true, "Year of enrollment is required"],
       min: [1950, "Invalid year"], max: [new Date().getFullYear(), "Invalid year"],
     },
 
     // ─── NO enum restriction — frontend se jo bhi aaye accept karo ──
-    practiceAreas:  { type: [String], required: [true, "At least one practice area is required"] },
-    categories:     { type: [String], default: [] }, // ✅ auto-derived from practiceAreas
+    practiceAreas: { type: [String], required: [true, "At least one practice area is required"] },
+    categories: { type: [String], default: [] }, // ✅ auto-derived from practiceAreas
     languagesKnown: { type: [String], required: [true, "At least one language is required"] },
 
     // ─── Address Details ─────────────────────────────────
-    city:          { type: String, required: [true, "City is required"], trim: true },
-    state:         { type: String, required: [true, "State is required"], trim: true },
+    city: { type: String, required: [true, "City is required"], trim: true },
+    state: { type: String, required: [true, "State is required"], trim: true },
     officeAddress: { type: String, required: [true, "Office address is required"], trim: true },
-    pincode:       { type: String, required: [true, "Pincode is required"], match: [/^\d{6}$/, "Invalid pincode"] },
+    pincode: { type: String, required: [true, "Pincode is required"], match: [/^\d{6}$/, "Invalid pincode"] },
 
     // ─── Identity ────────────────────────────────────────
     aadhaarNumber: {
@@ -63,31 +63,31 @@ const advocateSchema = new mongoose.Schema(
 
     // ─── Documents ───────────────────────────────────────
     documents: {
-      aadhaarFront:          { type: String, required: [true, "Aadhaar front photo is required"] },
-      aadhaarBack:           { type: String, required: [true, "Aadhaar back photo is required"] },
-      panCard:               { type: String, required: [true, "PAN card photo is required"] },
+      aadhaarFront: { type: String, required: [true, "Aadhaar front photo is required"] },
+      aadhaarBack: { type: String, required: [true, "Aadhaar back photo is required"] },
+      panCard: { type: String, required: [true, "PAN card photo is required"] },
       barCouncilCertificate: { type: String, required: [true, "Bar Council certificate is required"] },
     },
 
     // ─── Bank Details ────────────────────────────────────
     bankDetails: {
       accountHolderName: { type: String, required: [true, "Account holder name is required"], trim: true },
-      bankName:          { type: String, required: [true, "Bank name is required"], trim: true },
-      accountNumber:     { type: String, required: [true, "Account number is required"], trim: true },
-      ifscCode:          { type: String, required: [true, "IFSC code is required"], uppercase: true, match: [/^[A-Z]{4}0[A-Z0-9]{6}$/, "Invalid IFSC code"] },
-      upiId:             { type: String, trim: true, default: null },
+      bankName: { type: String, required: [true, "Bank name is required"], trim: true },
+      accountNumber: { type: String, required: [true, "Account number is required"], trim: true },
+      ifscCode: { type: String, required: [true, "IFSC code is required"], uppercase: true, match: [/^[A-Z]{4}0[A-Z0-9]{6}$/, "Invalid IFSC code"] },
+      upiId: { type: String, trim: true, default: null },
     },
 
     // ─── Availability ─────────────────────────────────────
     availableDays: { type: [String], required: [true, "Available days are required"] },
     availableHours: {
       from: { type: String, required: [true, "Available from time is required"] },
-      to:   { type: String, required: [true, "Available to time is required"] },
+      to: { type: String, required: [true, "Available to time is required"] },
     },
     perDocumentFee: { type: Number, required: [true, "Per document fee is required"], min: [100, "Minimum fee is ₹100"] },
 
     // ─── Verification ────────────────────────────────────
-    isEmailVerified:  { type: Boolean, default: false },
+    isEmailVerified: { type: Boolean, default: false },
     isMobileVerified: { type: Boolean, default: false },
 
     // ─── Document & Approval Status ──────────────────────
@@ -117,7 +117,7 @@ const advocateSchema = new mongoose.Schema(
 // ─── Password Hash ────────────────────────────────────────
 advocateSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
-  const salt    = await bcrypt.genSalt(10);
+  const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
 

@@ -6,11 +6,15 @@ const fs     = require("fs");
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let folder = "uploads/";
+
     if (file.fieldname === "recording") {
       folder += "recordings/";
+    } else if (file.fieldname === "profilePicAdvocate") {
+      folder += "profile_pics/";        
     } else {
       folder += "documents/";
     }
+
     if (!fs.existsSync(folder)) {
       fs.mkdirSync(folder, { recursive: true });
     }
@@ -25,14 +29,25 @@ const storage = multer.diskStorage({
 // ─── File Type Check ──────────────────────────────────────
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === "recording") {
-    // ✅ FIXED: video/webm;codecs=vp8,opus jaise mimetypes bhi allow ho jayenge
     if (file.mimetype.startsWith("video/")) {
       cb(null, true);
     } else {
       cb({ status: 400, message: "Only video files are allowed for recording" }, false);
     }
+
+  } else if (file.fieldname === "profilePicAdvocate") {
+    // ✅ Profile pic — only images allowed (no PDF)
+    const allowedImages = /jpeg|jpg|png|webp/;
+    const extname  = allowedImages.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedImages.test(file.mimetype);
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb({ status: 400, message: "Only JPG, PNG, or WEBP files are allowed for profile picture" }, false);
+    }
+
   } else {
-    // Documents ke liye image/pdf
+    // Documents — image or PDF
     const allowedDocs = /jpeg|jpg|png|pdf/;
     const extname  = allowedDocs.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedDocs.test(file.mimetype);
@@ -55,6 +70,7 @@ const upload = multer({
 
 // ─── Advocate ke saare files ek saath upload ─────────────
 const advocateUpload = upload.fields([
+  { name: "profilePicAdvocate",    maxCount: 1 },   // ✅ ADDED — optional profile pic
   { name: "aadhaarFront",          maxCount: 1 },
   { name: "aadhaarBack",           maxCount: 1 },
   { name: "panCard",               maxCount: 1 },

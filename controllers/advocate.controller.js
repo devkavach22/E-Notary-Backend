@@ -151,9 +151,7 @@ const parseDOB = (dobInput) => {
   return null;
 };
 
-// ═══════════════════════════════════════════════════════════
-// SEND EMAIL OTP
-// ═══════════════════════════════════════════════════════════
+
 const sendOTP = async (req, res) => {
   try {
     const { email } = req.body;
@@ -190,9 +188,7 @@ const sendOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// VERIFY EMAIL OTP
-// ═══════════════════════════════════════════════════════════
+
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -218,9 +214,7 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// SEND MOBILE OTP  (hardcoded test OTP)
-// ═══════════════════════════════════════════════════════════
+
 const TEST_MOBILE_OTP = "872356";
 
 const sendMobileOTP = async (req, res) => {
@@ -263,9 +257,7 @@ const sendMobileOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// VERIFY MOBILE OTP
-// ═══════════════════════════════════════════════════════════
+
 const verifyMobileOTP = async (req, res) => {
   try {
     const { mobile, otp } = req.body;
@@ -292,12 +284,7 @@ const verifyMobileOTP = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// REGISTER ADVOCATE
-// practiceAreas = group names  (e.g. "Civil & Family")
-// categories    = specific areas inside those groups
-//                 (e.g. "Divorce & Family Law", "Civil Litigation")
-// ═══════════════════════════════════════════════════════════
+
 const registerAdvocate = async (req, res) => {
   try {
     const {
@@ -327,17 +314,43 @@ const registerAdvocate = async (req, res) => {
     const parsedDOB = parseDOB(dateOfBirth);
     if (!parsedDOB) return res.status(400).json({ success: false, message: "Invalid dateOfBirth format" });
 
-    // ── Duplicate checks (cross-collection) ─────────────
-    // Block only if the same email/mobile exists in BOTH tables
+
+
+    // ── Duplicate checks ────────────────────────────────
+    // Email — block only if registered in BOTH collections
     const emailInAdv  = await Advocate.findOne({ email });
     const emailInUser = await User.findOne({ email });
     if (emailInAdv && emailInUser)
       return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
 
+    // If email already exists only in Advocate collection
+    if (emailInAdv)
+      return res.status(409).json({ success: false, message: "Email already registered as an advocate" });
+
+    // Mobile — block only if registered in BOTH collections
     const mobileInAdv  = await Advocate.findOne({ mobile });
     const mobileInUser = await User.findOne({ mobile });
     if (mobileInAdv && mobileInUser)
       return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
+
+    // If mobile already exists only in Advocate collection
+    if (mobileInAdv)
+      return res.status(409).json({ success: false, message: "Mobile number already registered as an advocate" });
+
+    // Bar Council Number — must be unique
+    const bcnExists = await Advocate.findOne({ barCouncilNumber: barCouncilNumber.toUpperCase() });
+    if (bcnExists)
+      return res.status(409).json({ success: false, message: "Bar Council number is already registered" });
+
+    // Aadhaar Number — must be unique
+    const aadhaarExists = await Advocate.findOne({ aadhaarNumber });
+    if (aadhaarExists)
+      return res.status(409).json({ success: false, message: "Aadhaar number is already registered" });
+
+    // PAN Number — must be unique
+    const panExists = await Advocate.findOne({ panNumber: panNumber.toUpperCase() });
+    if (panExists)
+      return res.status(409).json({ success: false, message: "PAN number is already registered" });
 
     // ── OTP verified check ───────────────────────────────
     const emailOTPVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
@@ -398,6 +411,10 @@ const registerAdvocate = async (req, res) => {
       city, state, officeAddress, pincode,
       aadhaarNumber,
       panNumber: panNumber.toUpperCase(),
+
+      // ✅ Profile picture — optional
+      profilePicAdvocate: files?.profilePicAdvocate?.[0]?.path || null,
+
       documents: {
         aadhaarFront:          files.aadhaarFront[0].path,
         aadhaarBack:           files.aadhaarBack[0].path,
@@ -435,13 +452,29 @@ const registerAdvocate = async (req, res) => {
 
   } catch (error) {
     console.error("registerAdvocate Error:", error);
+
+    // Catch any remaining MongoDB duplicate key errors as a safety net
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const fieldNames = {
+        email:            "Email",
+        mobile:           "Mobile number",
+        barCouncilNumber: "Bar Council number",
+        aadhaarNumber:    "Aadhaar number",
+        panNumber:        "PAN number",
+      };
+      const friendlyName = fieldNames[field] || field;
+      return res.status(409).json({
+        success: false,
+        message: `${friendlyName} is already registered`,
+      });
+    }
+
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// GET PRACTICE AREAS (grouped)
-// ═══════════════════════════════════════════════════════════
+
 const getPracticeAreas = async (req, res) => {
   return res.status(200).json({
     success: true,
@@ -450,9 +483,6 @@ const getPracticeAreas = async (req, res) => {
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// GET LOGGED IN ADVOCATE
-// ═══════════════════════════════════════════════════════════
 const getLoginAdvocate = async (req, res) => {
   try {
     const advocate = await Advocate.findById(req.advocate._id).select("-password");
@@ -466,7 +496,6 @@ const getLoginAdvocate = async (req, res) => {
   }
 };
 
-
 module.exports = {
   sendOTP,
   verifyOTP,
@@ -475,5 +504,4 @@ module.exports = {
   registerAdvocate,
   getPracticeAreas,
   getLoginAdvocate,
-  
 };

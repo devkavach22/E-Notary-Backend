@@ -377,8 +377,23 @@ const deleteTemplate = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
 
-    const template = await Template.findOneAndDelete({ _id: templateId, advocateId });
-    if (!template) return res.status(404).json({ success: false, message: "Template not found" });
+    // ✅ Check template exists and belongs to this advocate
+    const template = await Template.findOne({ _id: templateId, advocateId });
+    if (!template)
+      return res.status(404).json({ success: false, message: "Template not found" });
+
+    // ✅ Check if any user has used/is using this template
+    const activeUserCount = await UserFilledTemplate.countDocuments({ templateId });
+
+    if (activeUserCount > 0) {
+      return res.status(403).json({
+        success: false,
+        message: `Sorry, you can't delete this template. ${activeUserCount} user${activeUserCount > 1 ? "s are" : " is"} currently using this template.`,
+      });
+    }
+
+    // ✅ Safe to delete — no users using it
+    await Template.findOneAndDelete({ _id: templateId, advocateId });
 
     return res.status(200).json({ success: true, message: "Template deleted successfully" });
   } catch (error) {
