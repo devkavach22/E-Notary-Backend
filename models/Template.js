@@ -25,6 +25,11 @@ const fieldSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    defaultImagePath: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   { _id: false }
 );

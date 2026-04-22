@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const {
   sendOTP, verifyOTP, sendMobileOTP, verifyMobileOTP,
-  registerAdvocate,  getPracticeAreas,getLoginAdvocate
+  registerAdvocate,  getPracticeAreas,getLoginAdvocate,editAdvocateProfile
 } = require("../controllers/advocate.controller");
 
 const {
@@ -20,10 +20,11 @@ const {
 const { login, sendForgetPasswordOtp, confirmPassword } = require("../controllers/Auth.controller");
 const {
   advocateUpload, userUpload,
-  recordingUpload,
+  templateImageUpload,
+  filledTemplateImageUpload,
   handleUploadError,
 } = require("../middlewares/upload.middleware");
-const { UserverifyDocuments, registerUser, getUSerProfile, getAdvocatesForUser,getTemplatesForUser,fillTemplate,downloadFilledTemplate } = require("../controllers/User.controller");
+const { UserverifyDocuments, registerUser, getUSerProfile, getAdvocatesForUser,getTemplatesForUser,fillTemplate,downloadFilledTemplate,editUserProfile} = require("../controllers/User.controller");
 const {
   getAllAdvocates, getAdvocateDetails,
   verifyAdvocateDocuments,
@@ -46,13 +47,14 @@ router.post("/confirm-password", confirmPassword);
 router.post("/register", advocateUpload, handleUploadError, registerAdvocate);
 router.get("/advocates/practice-areas", getPracticeAreas);
 router.get("/advocate/me", advocateAuth, getLoginAdvocate);
+router.put("/advocate/profile/edit", advocateAuth, advocateUpload, handleUploadError, editAdvocateProfile);
 router.get("/advocate/dashboard", advocateAuth, getAdvocateDashboard);
  
 
-router.post  ("/create/template",        advocateAuth, createTemplate);
+router.post  ("/create/template",   templateImageUpload,       handleUploadError,     advocateAuth, createTemplate);
 router.get   ("/templates",              advocateAuth, getTemplates);
 router.get   ("/template/:templateId",   advocateAuth, getTemplateById);
-router.put   ("/template/:templateId",   advocateAuth, editTemplate);
+router.put   ("/template/:templateId",  templateImageUpload,       handleUploadError, advocateAuth, editTemplate);
 router.delete("/template/:templateId",   advocateAuth, deleteTemplate);
 router.get   ("/userfilled-templates",      advocateAuth, getFilledTemplates);
 
@@ -63,10 +65,12 @@ router.post("/user/verify-documents", userUpload, handleUploadError, UserverifyD
 router.post("/user/register", userUpload, handleUploadError, registerUser);
 router.get("/user/advocates",userAuth, getAdvocatesForUser);
 router.get("/user/advocate/:advocateId/templates", userAuth, getTemplatesForUser);
-router.post("/templates/:templateId/fill", userAuth, fillTemplate);
+router.post("/templates/:templateId/fill",filledTemplateImageUpload, handleUploadError ,userAuth, fillTemplate);
 router.get("/template/download/:submissionId", userAuth, downloadFilledTemplate);
 router.get("/user/mybooking", userAuth, getUserCases);
 router.get("/user/profile",userAuth, getUSerProfile);
+router.put("/user/profile/edit",userAuth,   editUserProfile,              // ✅ newly added
+);
 
 
 

@@ -6,14 +6,51 @@ const VALID_FIELD_TYPES = ["text", "number", "date", "textarea", "image", "file"
 const { sendTemplateAcceptedEmail, sendTemplateRejectedEmail } = require("./sendOTP");
 
 // ── Helpers ─────────────────────────────────────────────────
-const formatFields = (fields) =>
-  fields.map((f) => ({
-    fieldName: f.fieldName.trim(),
-    fieldType: f.fieldType,
-    required: f.required ?? false,
-    placeholder: f.placeholder?.trim() || "",
-    options: f.fieldType === "dropdown" ? f.options : [],
-  }));
+
+/**
+ * Build a map of fieldName → uploaded file path from multer's req.files array.
+ * Multer `upload.any()` puts files in req.files as an array.
+ *
+ * Convention:
+ *   - For createTemplate / editTemplate : field name = "templateImage_<fieldName>"
+ *   - For fillTemplate                  : field name = "filledImage_<fieldName>"
+ *
+ * @param {Array}  multerFiles  - req.files from upload.any()
+ * @param {string} prefix       - "templateImage_" | "filledImage_"
+ * @returns {Object}  { [normalizedFieldName]: filePath }
+ */
+const buildImageMap = (multerFiles = [], prefix = "templateImage_") => {
+  const map = {};
+  for (const file of multerFiles) {
+    if (file.fieldname.startsWith(prefix)) {
+      // Strip prefix, normalize to lowercase for case-insensitive matching
+      const fieldName = file.fieldname.slice(prefix.length).toLowerCase();
+      map[fieldName] = file.path;
+    }
+  }
+  return map;
+};
+
+const formatFields = (fields, imageMap = {}) =>
+  fields.map((f) => {
+    const base = {
+      fieldName: f.fieldName.trim(),
+      fieldType: f.fieldType,
+      required: f.required ?? false,
+      placeholder: f.placeholder?.trim() || "",
+      options: f.fieldType === "dropdown" ? f.options : [],
+    };
+
+    // ✅ If fieldType is "image" and a file was uploaded, store the path as defaultValue
+    if (f.fieldType === "image") {
+      const key = f.fieldName.trim().toLowerCase();
+      if (imageMap[key]) {
+        base.defaultImagePath = imageMap[key];
+      }
+    }
+
+    return base;
+  });
 
 const cleanFieldsForResponse = (fields) =>
   fields.map((f) => {
@@ -24,6 +61,7 @@ const cleanFieldsForResponse = (fields) =>
       placeholder: f.placeholder,
     };
     if (f.fieldType === "dropdown") field.options = f.options;
+    if (f.fieldType === "image" && f.defaultImagePath) field.defaultImagePath = f.defaultImagePath;
     return field;
   });
 
@@ -54,7 +92,6 @@ const validateParties = (parties) => {
     if (fieldError) return fieldError;
   }
 
-  // Duplicate party name check
   const names = parties.map((p) => p.partyName.trim().toLowerCase());
   const hasDupe = names.some((n, i) => names.indexOf(n) !== i);
   if (hasDupe) return "Duplicate party names are not allowed";
@@ -62,10 +99,10 @@ const validateParties = (parties) => {
   return null;
 };
 
-const formatParties = (parties) =>
+const formatParties = (parties, imageMap = {}) =>
   parties.map((p) => ({
     partyName: p.partyName.trim(),
-    fields: formatFields(p.fields),
+    fields: formatFields(p.fields, imageMap),
   }));
 
 const cleanPartiesForResponse = (parties) =>
@@ -78,21 +115,36 @@ const cleanPartiesForResponse = (parties) =>
 // ── CREATE TEMPLATE ──────────────────────────────────────────
 const createTemplate = async (req, res) => {
   try {
-    const { practiceArea, category, title, description, templateLayout, parties, fields } = req.body;
+    const { practiceArea, category, title, description, templateLayout } = req.body;
+
+    // ✅ Parse parties and fields from JSON string (because multipart/form-data sends them as strings)
+    let parties = [];
+    let fields  = [];
+    try {
+      if (req.body.parties) parties = JSON.parse(req.body.parties);
+      if (req.body.fields)  fields  = JSON.parse(req.body.fields);
+    } catch {
+      return res.status(400).json({ success: false, message: "Invalid JSON in parties or fields" });
+    }
+
     const advocateId = req.advocate._id;
 
-    const advocate = await Advocate.findById(advocateId).select("fullName approvalStatus isActive practiceAreas categories");
-    if (!advocate) return res.status(404).json({ success: false, message: "Advocate not found" });
+    const advocate = await Advocate.findById(advocateId).select(
+      "fullName approvalStatus isActive practiceAreas categories"
+    );
+    if (!advocate)
+      return res.status(404).json({ success: false, message: "Advocate not found" });
 
     if (advocate.approvalStatus !== "approved" || !advocate.isActive)
       return res.status(403).json({ success: false, message: "Unauthorized advocate" });
 
-    // ── Required field checks ───────────────────────────
-    if (!practiceArea?.trim()) return res.status(400).json({ success: false, message: "Practice area is required" });
-    if (!category?.trim()) return res.status(400).json({ success: false, message: "Category is required" });
-    if (!title?.trim()) return res.status(400).json({ success: false, message: "Template title is required" });
+    if (!practiceArea?.trim())
+      return res.status(400).json({ success: false, message: "Practice area is required" });
+    if (!category?.trim())
+      return res.status(400).json({ success: false, message: "Category is required" });
+    if (!title?.trim())
+      return res.status(400).json({ success: false, message: "Template title is required" });
 
-    // ── Advocate practiceArea validation ────────────────
     if (!advocate.practiceAreas.includes(practiceArea.trim())) {
       return res.status(403).json({
         success: false,
@@ -100,7 +152,6 @@ const createTemplate = async (req, res) => {
       });
     }
 
-    // ── Advocate category validation ────────────────────
     if (!advocate.categories.includes(category.trim())) {
       return res.status(403).json({
         success: false,
@@ -108,13 +159,15 @@ const createTemplate = async (req, res) => {
       });
     }
 
-    // ── Duplicate check ─────────────────────────────────
     const existing = await Template.findOne({ advocateId, title: title.trim(), isActive: true });
-    if (existing) return res.status(409).json({ success: false, message: "Template with this title already exists" });
+    if (existing)
+      return res.status(409).json({ success: false, message: "Template with this title already exists" });
 
-    // ── Determine mode: parties or flat fields ──────────
+    // ✅ Build image map from uploaded files
+    const imageMap = buildImageMap(req.files || [], "templateImage_");
+
     const hasParties = Array.isArray(parties) && parties.length > 0;
-    const hasFields = Array.isArray(fields) && fields.length > 0;
+    const hasFields  = Array.isArray(fields)  && fields.length  > 0;
 
     if (hasParties) {
       const partyError = validateParties(parties);
@@ -134,8 +187,8 @@ const createTemplate = async (req, res) => {
       title: title.trim(),
       description: description?.trim() || "",
       templateLayout: templateLayout || "",
-      parties: hasParties ? formatParties(parties) : [],
-      fields: hasFields ? formatFields(fields) : [],
+      parties: hasParties ? formatParties(parties, imageMap) : [],
+      fields:  hasFields  ? formatFields(fields, imageMap)   : [],
     });
 
     return res.status(201).json({
@@ -144,7 +197,7 @@ const createTemplate = async (req, res) => {
       data: {
         ...template.toObject(),
         parties: cleanPartiesForResponse(template.parties),
-        fields: cleanFieldsForResponse(template.fields),
+        fields:  cleanFieldsForResponse(template.fields),
       },
     });
 
@@ -162,8 +215,8 @@ const getTemplates = async (req, res) => {
 
     const filter = { advocateId };
     if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
-    if (category?.trim()) filter.category = category.trim();
-    if (isActive !== undefined) filter.isActive = isActive === "true";
+    if (category?.trim())     filter.category     = category.trim();
+    if (isActive !== undefined) filter.isActive   = isActive === "true";
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -174,7 +227,8 @@ const getTemplates = async (req, res) => {
 
     const data = templates.map((t) => ({
       ...t.toObject(),
-      parties: cleanPartiesForResponse(t.parties),  // ← changed from fields
+      parties: cleanPartiesForResponse(t.parties),
+      fields:  cleanFieldsForResponse(t.fields),
     }));
 
     return res.status(200).json({
@@ -198,44 +252,41 @@ const getTemplates = async (req, res) => {
 const editTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
-    const advocateId = req.advocate._id;
+    const advocateId     = req.advocate._id;
 
     console.log("═══════════════════════════════════════════");
     console.log("📥 editTemplate HIT");
-    console.log("📌 templateId (params)  :", templateId);
-    console.log("📦 req.body             :", JSON.stringify(req.body, null, 2));
-    console.log("📝 practiceArea         :", req.body.practiceArea);
-    console.log("📝 category             :", req.body.category);
-    console.log("📝 title                :", req.body.title);
-    console.log("📝 description          :", req.body.description);
-    console.log("📝 isActive             :", req.body.isActive);
-    console.log("📝 templateLayout       :", req.body.templateLayout);
-    console.log("👥 parties              :", JSON.stringify(req.body.parties, null, 2));
-    console.log("📋 fields               :", JSON.stringify(req.body.fields, null, 2));
-    console.log("═══════════════════════════════════════════");
+    console.log("📌 templateId (params):", templateId);
 
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
 
     const advocate = await Advocate.findById(advocateId).select("practiceAreas categories");
-    if (!advocate) return res.status(404).json({ success: false, message: "Advocate not found" });
+    if (!advocate)
+      return res.status(404).json({ success: false, message: "Advocate not found" });
 
     const template = await Template.findOne({ _id: templateId, advocateId });
-    if (!template) return res.status(404).json({ success: false, message: "Template not found" });
+    if (!template)
+      return res.status(404).json({ success: false, message: "Template not found" });
 
-    console.log("📂 Existing template from DB:");
-    console.log("   title          :", template.title);
-    console.log("   practiceArea   :", template.practiceArea);
-    console.log("   category       :", template.category);
-    console.log("   templateLayout :", template.templateLayout);
-    console.log("   parties        :", JSON.stringify(template.parties, null, 2));
-    console.log("   fields         :", JSON.stringify(template.fields, null, 2));
-    console.log("═══════════════════════════════════════════");
+    // ✅ Parse parties/fields from JSON string (multipart)
+    let parties;
+    let fields;
+    try {
+      if (req.body.parties !== undefined) parties = JSON.parse(req.body.parties);
+      if (req.body.fields  !== undefined) fields  = JSON.parse(req.body.fields);
+    } catch {
+      return res.status(400).json({ success: false, message: "Invalid JSON in parties or fields" });
+    }
 
-    const { practiceArea, category, title, description, parties, fields, isActive, templateLayout } = req.body;
+    const { practiceArea, category, title, description, isActive, templateLayout } = req.body;
+
+    // ✅ Build image map from uploaded files
+    const imageMap = buildImageMap(req.files || [], "templateImage_");
 
     if (practiceArea !== undefined) {
-      if (!practiceArea?.trim()) return res.status(400).json({ success: false, message: "Practice area cannot be empty" });
+      if (!practiceArea?.trim())
+        return res.status(400).json({ success: false, message: "Practice area cannot be empty" });
 
       if (!advocate.practiceAreas.includes(practiceArea.trim())) {
         return res.status(403).json({
@@ -247,7 +298,8 @@ const editTemplate = async (req, res) => {
     }
 
     if (category !== undefined) {
-      if (!category?.trim()) return res.status(400).json({ success: false, message: "Category cannot be empty" });
+      if (!category?.trim())
+        return res.status(400).json({ success: false, message: "Category cannot be empty" });
 
       if (!advocate.categories.includes(category.trim())) {
         return res.status(403).json({
@@ -259,7 +311,8 @@ const editTemplate = async (req, res) => {
     }
 
     if (title !== undefined) {
-      if (!title?.trim()) return res.status(400).json({ success: false, message: "Title cannot be empty" });
+      if (!title?.trim())
+        return res.status(400).json({ success: false, message: "Title cannot be empty" });
 
       const duplicate = await Template.findOne({
         advocateId,
@@ -267,36 +320,45 @@ const editTemplate = async (req, res) => {
         isActive: true,
         _id: { $ne: templateId },
       });
-      if (duplicate) return res.status(409).json({ success: false, message: "Template with this title already exists" });
+      if (duplicate)
+        return res.status(409).json({ success: false, message: "Template with this title already exists" });
 
       template.title = title.trim();
     }
 
     if (description !== undefined) template.description = description?.trim() || "";
-    if (isActive !== undefined) template.isActive = Boolean(isActive);
+    if (isActive    !== undefined) template.isActive    = Boolean(isActive);
 
     // ── Parties update ──────────────────────────────────
     if (parties !== undefined) {
-      console.log("🔄 Processing parties update...");
       const partyError = validateParties(parties);
       if (partyError) return res.status(400).json({ success: false, message: partyError });
 
       const existingPartyNames = new Set(template.parties.map((p) => p.partyName.toLowerCase()));
 
-      for (const incomingParty of formatParties(parties)) {
+      for (const incomingParty of formatParties(parties, imageMap)) {
         const partyNameKey = incomingParty.partyName.toLowerCase();
 
         if (existingPartyNames.has(partyNameKey)) {
-          console.log(`   ✅ Party "${incomingParty.partyName}" exists → merging new fields`);
           const existingParty = template.parties.find(
             (p) => p.partyName.toLowerCase() === partyNameKey
           );
           const existingFieldNames = new Set(existingParty.fields.map((f) => f.fieldName.toLowerCase()));
-          const newFields = incomingParty.fields.filter((f) => !existingFieldNames.has(f.fieldName.toLowerCase()));
-          console.log(`   ➕ New fields added to "${incomingParty.partyName}":`, newFields.map((f) => f.fieldName));
+
+          // ✅ For existing fields that are image type, update path if new file uploaded
+          for (const incoming of incomingParty.fields) {
+            const key = incoming.fieldName.toLowerCase();
+            if (existingFieldNames.has(key) && incoming.fieldType === "image" && incoming.defaultImagePath) {
+              const ef = existingParty.fields.find((f) => f.fieldName.toLowerCase() === key);
+              if (ef) ef.defaultImagePath = incoming.defaultImagePath;
+            }
+          }
+
+          const newFields = incomingParty.fields.filter(
+            (f) => !existingFieldNames.has(f.fieldName.toLowerCase())
+          );
           existingParty.fields = [...existingParty.fields, ...newFields];
         } else {
-          console.log(`   🆕 New party "${incomingParty.partyName}" → adding entirely`);
           template.parties.push(incomingParty);
         }
       }
@@ -304,25 +366,31 @@ const editTemplate = async (req, res) => {
 
     // ── Top-level fields update ─────────────────────────
     if (fields !== undefined) {
-      console.log("🔄 Processing fields update...");
       if (Array.isArray(fields) && fields.length > 0) {
         const fieldError = validateFields(fields);
         if (fieldError) return res.status(400).json({ success: false, message: fieldError });
 
+        const formatted         = formatFields(fields, imageMap);
         const existingFieldNames = new Set(template.fields.map((f) => f.fieldName.toLowerCase()));
-        const newFields = formatFields(fields).filter((f) => !existingFieldNames.has(f.fieldName.toLowerCase()));
-        console.log("   ➕ New fields added:", newFields.map((f) => f.fieldName));
+
+        // ✅ Update image paths for existing image fields
+        for (const incoming of formatted) {
+          const key = incoming.fieldName.toLowerCase();
+          if (existingFieldNames.has(key) && incoming.fieldType === "image" && incoming.defaultImagePath) {
+            const ef = template.fields.find((f) => f.fieldName.toLowerCase() === key);
+            if (ef) ef.defaultImagePath = incoming.defaultImagePath;
+          }
+        }
+
+        const newFields = formatted.filter((f) => !existingFieldNames.has(f.fieldName.toLowerCase()));
         template.fields = [...template.fields, ...newFields];
       } else {
-        // empty array sent → clear fields
         template.fields = [];
       }
     }
 
     // ── Template layout update ──────────────────────────
     if (templateLayout !== undefined) {
-      console.log("🖊️  templateLayout received → saving...");
-      console.log("   layout value:", templateLayout);
       template.templateLayout = templateLayout?.trim() || "";
     }
 
@@ -337,7 +405,7 @@ const editTemplate = async (req, res) => {
       data: {
         ...template.toObject(),
         parties: cleanPartiesForResponse(template.parties),
-        fields: cleanFieldsForResponse(template.fields),
+        fields:  cleanFieldsForResponse(template.fields),
       },
     });
 
@@ -346,21 +414,27 @@ const editTemplate = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
 // ── GET TEMPLATE BY ID ───────────────────────────────────────
 const getTemplateById = async (req, res) => {
   try {
     const { templateId } = req.params;
-    const advocateId = req.advocate._id;
+    const advocateId     = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
 
     const template = await Template.findOne({ _id: templateId, advocateId }).select("-__v");
-    if (!template) return res.status(404).json({ success: false, message: "Template not found" });
+    if (!template)
+      return res.status(404).json({ success: false, message: "Template not found" });
 
     return res.status(200).json({
       success: true,
-      data: { ...template.toObject(), fields: cleanFieldsForResponse(template.fields) },
+      data: {
+        ...template.toObject(),
+        parties: cleanPartiesForResponse(template.parties),
+        fields:  cleanFieldsForResponse(template.fields),
+      },
     });
   } catch (error) {
     console.error("getTemplateById Error:", error);
@@ -372,19 +446,16 @@ const getTemplateById = async (req, res) => {
 const deleteTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
-    const advocateId = req.advocate._id;
+    const advocateId     = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
 
-    // ✅ Check template exists and belongs to this advocate
     const template = await Template.findOne({ _id: templateId, advocateId });
     if (!template)
       return res.status(404).json({ success: false, message: "Template not found" });
 
-    // ✅ Check if any user has used/is using this template
     const activeUserCount = await UserFilledTemplate.countDocuments({ templateId });
-
     if (activeUserCount > 0) {
       return res.status(403).json({
         success: false,
@@ -392,7 +463,6 @@ const deleteTemplate = async (req, res) => {
       });
     }
 
-    // ✅ Safe to delete — no users using it
     await Template.findOneAndDelete({ _id: templateId, advocateId });
 
     return res.status(200).json({ success: true, message: "Template deleted successfully" });
@@ -419,7 +489,7 @@ const getFilledTemplates = async (req, res) => {
 
     const [submissions, total] = await Promise.all([
       UserFilledTemplate.find(filter)
-        .populate("userId", "fullName email mobile")
+        .populate("userId",     "fullName email mobile")
         .populate("templateId", "title practiceArea category")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -444,16 +514,18 @@ const getFilledTemplates = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+// ── ACCEPT SUBMISSION ────────────────────────────────────────
 const acceptSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const advocateId = req.advocate._id;
+    const advocateId       = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(submissionId))
       return res.status(400).json({ success: false, message: "Invalid submission ID" });
 
     const submission = await UserFilledTemplate.findOne({ _id: submissionId, advocateId })
-      .populate("userId", "fullName email")
+      .populate("userId",     "fullName email")
       .populate("templateId", "title");
 
     if (!submission)
@@ -465,21 +537,20 @@ const acceptSubmission = async (req, res) => {
         message: `Submission is already ${submission.status}`,
       });
 
-    submission.status = "accepted";
+    submission.status          = "accepted";
     submission.rejectionReason = null;
     await submission.save();
 
-    // Send acceptance email to user (non-blocking)
     try {
       if (submission.userId?.email) {
         await sendTemplateAcceptedEmail({
-          userEmail: submission.userId.email,
-          userName: submission.userId.fullName,
-          advocateName: req.advocate.fullName,
+          userEmail:     submission.userId.email,
+          userName:      submission.userId.fullName,
+          advocateName:  req.advocate.fullName,
           templateTitle: submission.title,
-          practiceArea: submission.practiceArea,
-          category: submission.category,
-          submissionId: submission._id.toString(),
+          practiceArea:  submission.practiceArea,
+          category:      submission.category,
+          submissionId:  submission._id.toString(),
         });
         console.log("✅ Acceptance email sent to user:", submission.userId.email);
       }
@@ -502,8 +573,8 @@ const acceptSubmission = async (req, res) => {
 const rejectSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const { reason } = req.body; // ✅ body se lo
-    const advocateId = req.advocate._id;
+    const { reason }       = req.body;
+    const advocateId       = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(submissionId))
       return res.status(400).json({ success: false, message: "Invalid submission ID" });
@@ -515,7 +586,7 @@ const rejectSubmission = async (req, res) => {
       return res.status(400).json({ success: false, message: "Reason must not exceed 500 characters" });
 
     const submission = await UserFilledTemplate.findOne({ _id: submissionId, advocateId })
-      .populate("userId", "fullName email")
+      .populate("userId",     "fullName email")
       .populate("templateId", "title");
 
     if (!submission)
@@ -527,21 +598,21 @@ const rejectSubmission = async (req, res) => {
         message: `Submission is already ${submission.status}`,
       });
 
-    submission.status = "rejected";
-    submission.rejectionReason = reason.trim(); // ✅ body wala reason save hoga
+    submission.status          = "rejected";
+    submission.rejectionReason = reason.trim();
     await submission.save();
 
     try {
       if (submission.userId?.email) {
         await sendTemplateRejectedEmail({
-          userEmail: submission.userId.email,
-          userName: submission.userId.fullName,
-          advocateName: req.advocate.fullName,
+          userEmail:     submission.userId.email,
+          userName:      submission.userId.fullName,
+          advocateName:  req.advocate.fullName,
           templateTitle: submission.title,
-          practiceArea: submission.practiceArea,
-          category: submission.category,
-          submissionId: submission._id.toString(),
-          reason: reason.trim(), // ✅ same reason email mein bhi
+          practiceArea:  submission.practiceArea,
+          category:      submission.category,
+          submissionId:  submission._id.toString(),
+          reason:        reason.trim(),
         });
         console.log("✅ Rejection email sent to user:", submission.userId.email);
       }
@@ -553,8 +624,8 @@ const rejectSubmission = async (req, res) => {
       success: true,
       message: "Submission rejected successfully",
       data: {
-        submissionId: submission._id,
-        status: submission.status,
+        submissionId:    submission._id,
+        status:          submission.status,
         rejectionReason: submission.rejectionReason,
       },
     });
@@ -563,6 +634,7 @@ const rejectSubmission = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
 // ── Date Helper ──────────────────────────────────────────────
 const formatDate = (date) => new Date(date).toISOString().split("T")[0];
 
@@ -600,42 +672,42 @@ const getAdvocateDashboard = async (req, res) => {
       success: true,
       data: {
         advocate: {
-          name: advocate.fullName,
-          joinDate: formatDate(advocate.createdAt), // ✅
+          name:     advocate.fullName,
+          joinDate: formatDate(advocate.createdAt),
         },
         stats: {
-          totalTemplates: totalTemplates,
-          totalUsers: totalUsers.length,
-          totalPending: pendingSubmissions.length,
-          totalAccepted: acceptedSubmissions.length,
-          totalRejected: rejectedSubmissions.length,
+          totalTemplates:  totalTemplates,
+          totalUsers:      totalUsers.length,
+          totalPending:    pendingSubmissions.length,
+          totalAccepted:   acceptedSubmissions.length,
+          totalRejected:   rejectedSubmissions.length,
         },
         pending: pendingSubmissions.map((s) => ({
           submissionId: s._id,
-          title: s.title,
+          title:        s.title,
           practiceArea: s.practiceArea,
-          category: s.category,
-          userName: s.userId?.fullName || "N/A",
-          submitDate: formatDate(s.createdAt), // ✅
+          category:     s.category,
+          userName:     s.userId?.fullName || "N/A",
+          submitDate:   formatDate(s.createdAt),
         })),
         accepted: acceptedSubmissions.map((s) => ({
           submissionId: s._id,
-          title: s.title,
+          title:        s.title,
           practiceArea: s.practiceArea,
-          category: s.category,
-          userName: s.userId?.fullName || "N/A",
-          submitDate: formatDate(s.createdAt), // ✅
-          acceptDate: formatDate(s.updatedAt), // ✅
+          category:     s.category,
+          userName:     s.userId?.fullName || "N/A",
+          submitDate:   formatDate(s.createdAt),
+          acceptDate:   formatDate(s.updatedAt),
         })),
         rejected: rejectedSubmissions.map((s) => ({
-          submissionId: s._id,
-          title: s.title,
-          practiceArea: s.practiceArea,
-          category: s.category,
-          userName: s.userId?.fullName || "N/A",
+          submissionId:    s._id,
+          title:           s.title,
+          practiceArea:    s.practiceArea,
+          category:        s.category,
+          userName:        s.userId?.fullName || "N/A",
           rejectionReason: s.rejectionReason,
-          submitDate: formatDate(s.createdAt), // ✅
-          rejectedDate: formatDate(s.updatedAt), // ✅
+          submitDate:      formatDate(s.createdAt),
+          rejectedDate:    formatDate(s.updatedAt),
         })),
       },
     });
@@ -645,4 +717,14 @@ const getAdvocateDashboard = async (req, res) => {
   }
 };
 
-module.exports = { createTemplate, getTemplates, getTemplateById, editTemplate, deleteTemplate, getFilledTemplates, acceptSubmission, rejectSubmission, getAdvocateDashboard };
+module.exports = {
+  createTemplate,
+  getTemplates,
+  getTemplateById,
+  editTemplate,
+  deleteTemplate,
+  getFilledTemplates,
+  acceptSubmission,
+  rejectSubmission,
+  getAdvocateDashboard,
+};

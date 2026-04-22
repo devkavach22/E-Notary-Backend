@@ -10,7 +10,13 @@ const storage = multer.diskStorage({
     if (file.fieldname === "recording") {
       folder += "recordings/";
     } else if (file.fieldname === "profilePicAdvocate") {
-      folder += "profile_pics/";        
+      folder += "profile_pics/";
+    } else if (file.fieldname.startsWith("templateImage_")) {
+      // ✅ Template field images → uploads/template_images/
+      folder += "template_images/";
+    } else if (file.fieldname.startsWith("filledImage_")) {
+      // ✅ User-filled template images → uploads/filled_images/
+      folder += "filled_images/";
     } else {
       folder += "documents/";
     }
@@ -20,6 +26,7 @@ const storage = multer.diskStorage({
     }
     cb(null, folder);
   },
+
   filename: (req, file, cb) => {
     const uniqueName = `${file.fieldname}_${Date.now()}${path.extname(file.originalname)}`;
     cb(null, uniqueName);
@@ -36,7 +43,6 @@ const fileFilter = (req, file, cb) => {
     }
 
   } else if (file.fieldname === "profilePicAdvocate") {
-    // ✅ Profile pic — only images allowed (no PDF)
     const allowedImages = /jpeg|jpg|png|webp/;
     const extname  = allowedImages.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedImages.test(file.mimetype);
@@ -44,6 +50,20 @@ const fileFilter = (req, file, cb) => {
       cb(null, true);
     } else {
       cb({ status: 400, message: "Only JPG, PNG, or WEBP files are allowed for profile picture" }, false);
+    }
+
+  } else if (
+    file.fieldname.startsWith("templateImage_") ||
+    file.fieldname.startsWith("filledImage_")
+  ) {
+    // ✅ Template/filled image fields — only images allowed
+    const allowedImages = /jpeg|jpg|png|webp/;
+    const extname  = allowedImages.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedImages.test(file.mimetype);
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb({ status: 400, message: "Only JPG, PNG, or WEBP files are allowed for image fields" }, false);
     }
 
   } else {
@@ -70,7 +90,7 @@ const upload = multer({
 
 // ─── Advocate ke saare files ek saath upload ─────────────
 const advocateUpload = upload.fields([
-  { name: "profilePicAdvocate",    maxCount: 1 },   // ✅ ADDED — optional profile pic
+  { name: "profilePicAdvocate",    maxCount: 1 },
   { name: "aadhaarFront",          maxCount: 1 },
   { name: "aadhaarBack",           maxCount: 1 },
   { name: "panCard",               maxCount: 1 },
@@ -85,6 +105,18 @@ const userUpload = upload.fields([
 
 // ─── Recording upload ─────────────────────────────────────
 const recordingUpload = upload.single("recording");
+
+// ─── Template image upload (dynamic field names) ──────────
+// Field naming convention: templateImage_<fieldName>
+// Example: templateImage_profilePhoto, templateImage_signatureImage
+// Use this middleware for createTemplate and editTemplate routes
+const templateImageUpload = upload.any(); // accepts any field dynamically
+
+// ─── User filled template image upload (dynamic field names) ─
+// Field naming convention: filledImage_<fieldName>
+// Example: filledImage_profilePhoto, filledImage_idProof
+// Use this middleware for fillTemplate route
+const filledTemplateImageUpload = upload.any(); // accepts any field dynamically
 
 // ─── Multer Error Handle karo ─────────────────────────────
 const handleUploadError = (err, req, res, next) => {
@@ -110,5 +142,7 @@ module.exports = {
   advocateUpload,
   userUpload,
   recordingUpload,
+  templateImageUpload,        // ✅ for createTemplate / editTemplate
+  filledTemplateImageUpload,  // ✅ for fillTemplate
   handleUploadError,
 };

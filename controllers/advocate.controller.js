@@ -1,6 +1,7 @@
 const Advocate = require("../models/Advocate");
 const User = require("../models/User");
 const OTP = require("../models/OTP");
+const fs  = require("fs");
 const { generateOTP, sendOTPEmail, sendAdminNewAdvocateNotification } = require("./sendOTP");
 
 // ═══════════════════════════════════════════════════════════
@@ -496,6 +497,183 @@ const getLoginAdvocate = async (req, res) => {
   }
 };
 
+// ═══════════════════════════════════════════════════════════
+// HELPER — delete old file from disk
+// ═══════════════════════════════════════════════════════════
+const deleteOldFile = (filePath) => {
+  if (!filePath) return;
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch (err) {
+    console.error("File delete error:", err.message);
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// EDIT ADVOCATE PROFILE  (PUT /api/advocate/profile)
+// Allowed: email, mobile, officeAddress, city, state,
+//          pincode, availableDays, availableFrom,
+//          availableTo, perDocumentFee, profilePicAdvocate
+// ═══════════════════════════════════════════════════════════
+const editAdvocateProfile = async (req, res) => {
+  try {
+    const advocateId = req.advocate._id;
+
+    const {
+      email,
+      mobile,
+      officeAddress,
+      city,
+      state,
+      pincode,
+      availableDays,
+      availableFrom,
+      availableTo,
+      perDocumentFee,
+    } = req.body;
+
+    const files = req.files;
+
+    // ── Fetch current advocate ───────────────────────────
+    const advocate = await Advocate.findById(advocateId);
+    if (!advocate)
+      return res.status(404).json({ success: false, message: "Advocate not found" });
+
+    const updates = {};
+
+    // ════════════════════════════════════════════════════
+    // 1. EMAIL
+    // ════════════════════════════════════════════════════
+    if (email && email !== advocate.email) {
+      const emailErr = validateEmail(email);
+      if (emailErr)
+        return res.status(400).json({ success: false, message: emailErr });
+
+      const emailInAdv  = await Advocate.findOne({ email, _id: { $ne: advocateId } });
+      const emailInUser = await User.findOne({ email });
+      if (emailInAdv)
+        return res.status(409).json({ success: false, message: "Email already registered as an advocate" });
+      if (emailInUser)
+        return res.status(409).json({ success: false, message: "Email already registered as a user" });
+
+      // New email must be OTP-verified
+      const emailOTPVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
+      if (!emailOTPVerified)
+        return res.status(400).json({ success: false, message: "New email is not verified. Please verify via OTP first." });
+
+      updates.email           = email.toLowerCase().trim();
+      updates.isEmailVerified = true;
+    }
+
+    // ════════════════════════════════════════════════════
+    // 2. MOBILE
+    // ════════════════════════════════════════════════════
+    if (mobile && mobile !== advocate.mobile) {
+      const mobileErr = validateMobile(mobile);
+      if (mobileErr)
+        return res.status(400).json({ success: false, message: mobileErr });
+
+      const mobileInAdv  = await Advocate.findOne({ mobile, _id: { $ne: advocateId } });
+      const mobileInUser = await User.findOne({ mobile });
+      if (mobileInAdv)
+        return res.status(409).json({ success: false, message: "Mobile number already registered as an advocate" });
+      if (mobileInUser)
+        return res.status(409).json({ success: false, message: "Mobile number already registered as a user" });
+
+      // New mobile must be OTP-verified
+      const mobileOTPVerified = await OTP.findOne({ mobile, purpose: "mobile_verify", isUsed: true });
+      if (!mobileOTPVerified)
+        return res.status(400).json({ success: false, message: "New mobile is not verified. Please verify via OTP first." });
+
+      updates.mobile           = mobile;
+      updates.isMobileVerified = true;
+    }
+
+    // ════════════════════════════════════════════════════
+    // 3. ADDRESS
+    // ════════════════════════════════════════════════════
+    if (officeAddress) updates.officeAddress = officeAddress.trim();
+    if (city)          updates.city          = city.trim();
+    if (state)         updates.state         = state.trim();
+
+    if (pincode) {
+      if (!/^\d{6}$/.test(pincode))
+        return res.status(400).json({ success: false, message: "Invalid pincode. Must be 6 digits." });
+      updates.pincode = pincode;
+    }
+
+    // ════════════════════════════════════════════════════
+    // 4. AVAILABILITY
+    // ════════════════════════════════════════════════════
+    if (availableDays) {
+      const parsedDays = typeof availableDays === "string"
+        ? JSON.parse(availableDays)
+        : availableDays;
+
+      if (!Array.isArray(parsedDays) || parsedDays.length === 0)
+        return res.status(400).json({ success: false, message: "availableDays must be a non-empty array" });
+
+      updates.availableDays = parsedDays;
+    }
+
+    if (availableFrom || availableTo) {
+      updates.availableHours = {
+        from: availableFrom || advocate.availableHours.from,
+        to:   availableTo   || advocate.availableHours.to,
+      };
+    }
+
+    // ════════════════════════════════════════════════════
+    // 5. PER DOCUMENT FEE
+    // ════════════════════════════════════════════════════
+    if (perDocumentFee !== undefined && perDocumentFee !== "") {
+      const fee = Number(perDocumentFee);
+      if (isNaN(fee) || fee < 100)
+        return res.status(400).json({ success: false, message: "perDocumentFee must be a number and at least ₹100" });
+      updates.perDocumentFee = fee;
+    }
+
+    // ════════════════════════════════════════════════════
+    // 6. PROFILE PICTURE
+    // ════════════════════════════════════════════════════
+    if (files?.profilePicAdvocate?.[0]?.path) {
+      deleteOldFile(advocate.profilePicAdvocate); // remove old pic from disk
+      updates.profilePicAdvocate = files.profilePicAdvocate[0].path;
+    }
+
+    // ── Nothing to update? ───────────────────────────────
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ success: false, message: "No valid fields provided to update" });
+
+    // ── Apply updates ────────────────────────────────────
+    const updatedAdvocate = await Advocate.findByIdAndUpdate(
+      advocateId,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updatedAdvocate,
+    });
+
+  } catch (error) {
+    console.error("editAdvocateProfile Error:", error);
+
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const fieldNames = { email: "Email", mobile: "Mobile number" };
+      return res.status(409).json({
+        success: false,
+        message: `${fieldNames[field] || field} is already registered`,
+      });
+    }
+
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 module.exports = {
   sendOTP,
   verifyOTP,
@@ -504,4 +682,5 @@ module.exports = {
   registerAdvocate,
   getPracticeAreas,
   getLoginAdvocate,
+  editAdvocateProfile,
 };
