@@ -23,7 +23,7 @@ const {
   recordingUpload,
   handleUploadError,
 } = require("../middlewares/upload.middleware");
-const { UserverifyDocuments, registerUser, getUserById, getAdvocatesForUser,getTemplatesForUser,fillTemplate,downloadFilledTemplate } = require("../controllers/User.controller");
+const { UserverifyDocuments, registerUser, getUSerProfile, getAdvocatesForUser,getTemplatesForUser,fillTemplate,downloadFilledTemplate } = require("../controllers/User.controller");
 const {
   getAllAdvocates, getAdvocateDetails,
   verifyAdvocateDocuments,
@@ -66,6 +66,7 @@ router.get("/user/advocate/:advocateId/templates", userAuth, getTemplatesForUser
 router.post("/templates/:templateId/fill", userAuth, fillTemplate);
 router.get("/template/download/:submissionId", userAuth, downloadFilledTemplate);
 router.get("/user/mybooking", userAuth, getUserCases);
+router.get("/user/profile",userAuth, getUSerProfile);
 
 
 
@@ -79,7 +80,6 @@ router.put("/admin/advocate/:id/approve", adminAuth, approveAdvocate);
 router.put("/admin/advocate/:id/reject",  adminAuth, rejectAdvocate);
 router.get("/admin/user/:id",             adminAuth, getUserDetails);
 router.get("/admin/advocate/:id",         adminAuth, getAdvocateDetails);
-router.get("/user/:id", getUserById);
 
 
 

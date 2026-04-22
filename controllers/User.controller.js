@@ -208,9 +208,9 @@ const registerUser = async (req, res) => {
 };
 
 
-const getUserById = async (req, res) => {
+const getUSerProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-password");
+    const user = await User.findById(req.user._id).select("-password");
 
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
@@ -218,11 +218,7 @@ const getUserById = async (req, res) => {
     return res.status(200).json({ success: true, data: user });
 
   } catch (error) {
-    console.error("getUserById Error:", error);
-
-    if (error.name === "CastError" && error.kind === "ObjectId")
-      return res.status(404).json({ success: false, message: "User not found" });
-
+    console.error("getMe Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -642,7 +638,7 @@ const downloadFilledTemplate = async (req, res) => {
 module.exports = {
   UserverifyDocuments,
   registerUser,
-  getUserById,
+  getUSerProfile,
   getAdvocatesForUser,
   getTemplatesForUser,
   fillTemplate,
