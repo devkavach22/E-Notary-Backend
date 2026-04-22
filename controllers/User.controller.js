@@ -39,12 +39,12 @@ const validatePassword = (password) => {
 const cleanFieldsForResponse = (fields) =>
   fields.map((f) => {
     const field = {
-      fieldName:   f.fieldName,
-      fieldType:   f.fieldType,
-      required:    f.required,
+      fieldName: f.fieldName,
+      fieldType: f.fieldType,
+      required: f.required,
       placeholder: f.placeholder,
     };
-    if (f.fieldType === "dropdown") field.options           = f.options;
+    if (f.fieldType === "dropdown") field.options = f.options;
     if (f.fieldType === "image" && f.defaultImagePath) field.defaultImagePath = f.defaultImagePath;
     return field;
   });
@@ -71,7 +71,7 @@ const UserverifyDocuments = async (req, res) => {
       message: "Documents verified successfully",
       filePaths: {
         aadhaarFront: files.aadhaarFront[0].path,
-        panCard:      files.panCard[0].path,
+        panCard: files.panCard[0].path,
       },
     });
 
@@ -119,12 +119,12 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid pincode" });
 
     const emailInUser = await User.findOne({ email });
-    const emailInAdv  = await Advocate.findOne({ email });
+    const emailInAdv = await Advocate.findOne({ email });
     if (emailInUser && emailInAdv)
       return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
 
     const mobileInUser = await User.findOne({ mobile });
-    const mobileInAdv  = await Advocate.findOne({ mobile });
+    const mobileInAdv = await Advocate.findOne({ mobile });
     if (mobileInUser && mobileInAdv)
       return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
 
@@ -155,13 +155,13 @@ const registerUser = async (req, res) => {
       address, city, state, pincode,
       documents: {
         aadhaarFront: aadhaarFrontPath,
-        panCard:      panCardPath,
+        panCard: panCardPath,
       },
-      isEmailVerified:  true,
+      isEmailVerified: true,
       isMobileVerified: true,
       verificationChecks: {
         aadhaarVerified: true,
-        panVerified:     true,
+        panVerified: true,
       },
     });
 
@@ -169,10 +169,10 @@ const registerUser = async (req, res) => {
       success: true,
       message: "User registered successfully.",
       data: {
-        id:       user._id,
+        id: user._id,
         fullName: user.fullName,
-        email:    user.email,
-        role:     user.role,
+        email: user.email,
+        role: user.role,
       },
     });
 
@@ -187,10 +187,10 @@ const registerUser = async (req, res) => {
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
       const fieldLabels = {
-        email:        "Email",
-        mobile:       "Mobile number",
-        aadhaarNumber:"Aadhaar number",
-        panNumber:    "PAN number",
+        email: "Email",
+        mobile: "Mobile number",
+        aadhaarNumber: "Aadhaar number",
+        panNumber: "PAN number",
       };
       const label = fieldLabels[field] || field;
       return res.status(409).json({ success: false, message: `${label} is already registered` });
@@ -229,7 +229,7 @@ const getAdvocatesForUser = async (req, res) => {
     }
 
     const baseFilter = { isActive: true, approvalStatus: "approved" };
-    let filter       = { ...baseFilter };
+    let filter = { ...baseFilter };
 
     if (caseType && caseType.trim().toLowerCase() !== "all") {
       filter.practiceAreas = {
@@ -281,7 +281,7 @@ const getAdvocatesForUser = async (req, res) => {
         ...(category && category.trim().toLowerCase() !== "all" && { category: category.trim() }),
       },
       total: filteredAdvocates.length,
-      data:  filteredAdvocates,
+      data: filteredAdvocates,
     });
 
   } catch (error) {
@@ -300,9 +300,9 @@ const getTemplatesForUser = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid advocate ID" });
 
     const advocate = await Advocate.findOne({
-      _id:            advocateId,
+      _id: advocateId,
       approvalStatus: "approved",
-      isActive:       true,
+      isActive: true,
     }).select("fullName");
 
     if (!advocate)
@@ -317,7 +317,7 @@ const getTemplatesForUser = async (req, res) => {
 
     const filter = { advocateId, isActive: true };
     if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
-    if (category?.trim())     filter.category     = category.trim();
+    if (category?.trim()) filter.category = category.trim();
 
     const templates = await Template.find(filter)
       .sort({ createdAt: -1 })
@@ -331,7 +331,7 @@ const getTemplatesForUser = async (req, res) => {
       advocateName: advocate.fullName,
       filterApplied: {
         ...(practiceArea?.trim() && { practiceArea: practiceArea.trim() }),
-        ...(category?.trim()     && { category:     category.trim()     }),
+        ...(category?.trim() && { category: category.trim() }),
       },
       totalTemplates: templates.length,
       userData: user,
@@ -357,13 +357,17 @@ const fillTemplate = async (req, res) => {
     if (!req.user?._id)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    // ✅ Parse filledFields from JSON string (multipart/form-data sends it as a string)
+    // ✅ Parse filledFields from JSON string (multipart) or object (application/json)
     let filledFields = [];
     try {
       if (req.body.filledFields) {
-        filledFields = JSON.parse(req.body.filledFields);
+        filledFields = typeof req.body.filledFields === "string"
+          ? JSON.parse(req.body.filledFields.trim())
+          : req.body.filledFields;
       }
-    } catch {
+    } catch (e) {
+      console.error("JSON parse failed:", e.message);
+      console.error("raw filledFields:", req.body.filledFields);
       return res.status(400).json({ success: false, message: "Invalid JSON in filledFields" });
     }
 
@@ -402,13 +406,12 @@ const fillTemplate = async (req, res) => {
       );
 
       if (templateField.fieldType === "image") {
-        // Image field: check uploaded file OR a value (URL/path) in filledFields
-        const key         = templateField.fieldName.trim().toLowerCase();
-        const hasUpload   = !!uploadedImageMap[key];
-        const hasValue    = userField &&
-                            userField.value !== null &&
-                            userField.value !== undefined &&
-                            String(userField.value).trim() !== "";
+        const key = templateField.fieldName.trim().toLowerCase();
+        const hasUpload = !!uploadedImageMap[key];
+        const hasValue = userField &&
+          userField.value !== null &&
+          userField.value !== undefined &&
+          String(userField.value).trim() !== "";
         if (!hasUpload && !hasValue) missingFields.push(templateField.fieldName);
       } else {
         const isEmpty =
@@ -433,12 +436,11 @@ const fillTemplate = async (req, res) => {
       );
 
       const fieldType = templateField?.fieldType || "text";
-      const key       = userField.fieldName.trim().toLowerCase();
+      const key = userField.fieldName.trim().toLowerCase();
 
       let value = userField.value;
 
       if (fieldType === "image" && uploadedImageMap[key]) {
-        // ✅ Uploaded file path takes precedence
         value = uploadedImageMap[key];
       }
 
@@ -450,7 +452,6 @@ const fillTemplate = async (req, res) => {
     });
 
     // ✅ Also add image-only fields that were uploaded but not in filledFields JSON
-    // (e.g. user sent file but forgot to include it in the JSON array)
     for (const [key, filePath] of Object.entries(uploadedImageMap)) {
       const alreadyEnriched = enrichedFields.some(
         (f) => f.fieldName.toLowerCase() === key
@@ -463,7 +464,7 @@ const fillTemplate = async (req, res) => {
           enrichedFields.push({
             fieldName: templateField.fieldName,
             fieldType: "image",
-            value:     filePath,
+            value: filePath,
           });
         }
       }
@@ -471,15 +472,15 @@ const fillTemplate = async (req, res) => {
 
     const existing = await UserFilledTemplate.findOne({
       templateId: template._id,
-      userId:     req.user._id,
-      status:     { $in: ["submitted", "approved"] },
+      userId: req.user._id,
+      status: { $in: ["submitted", "approved"] },
       filledFields: {
         $all: enrichedFields
-          .filter((f) => f.fieldType !== "image") // skip image fields from duplicate check
+          .filter((f) => f.fieldType !== "image")
           .map((f) => ({
             $elemMatch: {
               fieldName: f.fieldName,
-              value:     String(f.value).trim(),
+              value: String(f.value).trim(),
             },
           })),
       },
@@ -492,31 +493,31 @@ const fillTemplate = async (req, res) => {
       });
 
     const filledTemplate = await UserFilledTemplate.create({
-      templateId:   template._id,
-      advocateId:   template.advocateId,
-      userId:       req.user._id,
-      title:        template.title,
+      templateId: template._id,
+      advocateId: template.advocateId,
+      userId: req.user._id,
+      title: template.title,
       practiceArea: template.practiceArea,
-      category:     template.category,
+      category: template.category,
       filledFields: enrichedFields,
-      status:       "submitted",
+      status: "submitted",
     });
 
     try {
       const advocate = await Advocate.findById(template.advocateId).select("email fullName");
-      const user     = await User.findById(req.user._id).select("fullName email mobile");
+      const user = await User.findById(req.user._id).select("fullName email mobile");
       if (advocate && user) {
         await sendTemplateSubmissionEmail({
           advocateEmail: advocate.email,
-          advocateName:  advocate.fullName,
-          userName:      user.fullName,
-          userEmail:     user.email,
-          userMobile:    user.mobile,
+          advocateName: advocate.fullName,
+          userName: user.fullName,
+          userEmail: user.email,
+          userMobile: user.mobile,
           templateTitle: template.title,
-          practiceArea:  template.practiceArea,
-          category:      template.category,
-          submissionId:  filledTemplate._id.toString(),
-          filledFields:  enrichedFields,
+          practiceArea: template.practiceArea,
+          category: template.category,
+          submissionId: filledTemplate._id.toString(),
+          filledFields: enrichedFields,
         });
         console.log("✅ Template submission email sent to advocate:", advocate.email);
       }
@@ -527,7 +528,7 @@ const fillTemplate = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Template submitted successfully",
-      data:    filledTemplate,
+      data: filledTemplate,
     });
 
   } catch (error) {
@@ -544,10 +545,10 @@ const downloadFilledTemplate = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid submission ID" });
 
     const submission = await UserFilledTemplate.findOne({
-      _id:    submissionId,
+      _id: submissionId,
       userId: req.user._id,
     })
-      .populate("userId",     "fullName email mobile")
+      .populate("userId", "fullName email mobile")
       .populate("templateId", "title practiceArea category");
 
     if (!submission)
@@ -559,17 +560,17 @@ const downloadFilledTemplate = async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="submission_${submissionId}.pdf"`);
     doc.pipe(res);
 
-    const DARK_BLUE  = "#1a3c5e";
-    const WHITE      = "#ffffff";
+    const DARK_BLUE = "#1a3c5e";
+    const WHITE = "#ffffff";
     const LIGHT_GRAY = "#f5f7fa";
-    const BORDER     = "#e0e4ea";
-    const TEXT_DARK  = "#1a1a2e";
+    const BORDER = "#e0e4ea";
+    const TEXT_DARK = "#1a1a2e";
     const TEXT_MUTED = "#6b7280";
-    const GREEN_BG   = "#e1f5ee";
+    const GREEN_BG = "#e1f5ee";
     const GREEN_TEXT = "#0f6e56";
 
-    const pageW    = doc.page.width;
-    const margin   = 50;
+    const pageW = doc.page.width;
+    const margin = 50;
     const contentW = pageW - margin * 2;
 
     doc.rect(0, 0, pageW, 110).fill(DARK_BLUE);
@@ -578,30 +579,30 @@ const downloadFilledTemplate = async (req, res) => {
       .fontSize(20).font("Helvetica-Bold").fillColor(WHITE)
       .text(submission.title || "Filled Template", margin, 28, { align: "center", width: contentW });
 
-    const badgeY  = 62;
-    const badge1  = `Practice Area : ${submission.practiceArea}`;
-    const badge2  = `Category : ${submission.category}`;
+    const badgeY = 62;
+    const badge1 = `Practice Area : ${submission.practiceArea}`;
+    const badge2 = `Category : ${submission.category}`;
 
     doc.fontSize(10).font("Helvetica");
-    const b1W          = doc.widthOfString(badge1) + 20;
-    const b2W          = doc.widthOfString(badge2) + 20;
-    const totalBadgeW  = b1W + b2W + 10;
-    const badgeStartX  = (pageW - totalBadgeW) / 2;
+    const b1W = doc.widthOfString(badge1) + 20;
+    const b2W = doc.widthOfString(badge2) + 20;
+    const totalBadgeW = b1W + b2W + 10;
+    const badgeStartX = (pageW - totalBadgeW) / 2;
 
-    doc.roundedRect(badgeStartX,            badgeY, b1W, 18, 9).fillOpacity(0.15).fill(WHITE);
+    doc.roundedRect(badgeStartX, badgeY, b1W, 18, 9).fillOpacity(0.15).fill(WHITE);
     doc.roundedRect(badgeStartX + b1W + 10, badgeY, b2W, 18, 9).fillOpacity(0.1).fill(WHITE);
     doc.fillOpacity(1);
 
-    doc.fillColor("#e8f4ff").text(badge1, badgeStartX + 10,           badgeY + 4, { lineBreak: false });
-    doc.fillColor("#c8e0f8").text(badge2, badgeStartX + b1W + 20,     badgeY + 4, { lineBreak: false });
+    doc.fillColor("#e8f4ff").text(badge1, badgeStartX + 10, badgeY + 4, { lineBreak: false });
+    doc.fillColor("#c8e0f8").text(badge2, badgeStartX + b1W + 20, badgeY + 4, { lineBreak: false });
 
     const cardY = 125;
     doc.rect(margin, cardY, contentW, 72).fill(LIGHT_GRAY);
     doc.rect(margin, cardY, contentW, 72).stroke(BORDER);
 
-    const avatarX  = margin + 16;
-    const avatarY  = cardY + 36;
-    const user     = submission.userId;
+    const avatarX = margin + 16;
+    const avatarY = cardY + 36;
+    const user = submission.userId;
     const initials = (user?.fullName || "?")
       .split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
@@ -614,13 +615,13 @@ const downloadFilledTemplate = async (req, res) => {
       .text(user?.fullName || "N/A", infoX, cardY + 14, { lineBreak: false });
 
     doc.fontSize(10).font("Helvetica").fillColor(TEXT_MUTED);
-    doc.text(`Email: `,   infoX,       cardY + 33, { continued: true,  lineBreak: false });
-    doc.fillColor(TEXT_DARK).text(user?.email  || "N/A", { continued: false, lineBreak: false });
+    doc.text(`Email: `, infoX, cardY + 33, { continued: true, lineBreak: false });
+    doc.fillColor(TEXT_DARK).text(user?.email || "N/A", { continued: false, lineBreak: false });
 
-    doc.fillColor(TEXT_MUTED).text(`Mobile: `, infoX + 200, cardY + 33, { continued: true,  lineBreak: false });
+    doc.fillColor(TEXT_MUTED).text(`Mobile: `, infoX + 200, cardY + 33, { continued: true, lineBreak: false });
     doc.fillColor(TEXT_DARK).text(user?.mobile || "N/A", { continued: false, lineBreak: false });
 
-    doc.fillColor(TEXT_MUTED).text(`Date: `,   infoX,       cardY + 50, { continued: true,  lineBreak: false });
+    doc.fillColor(TEXT_MUTED).text(`Date: `, infoX, cardY + 50, { continued: true, lineBreak: false });
     doc.fillColor(TEXT_DARK).text(
       new Date(submission.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
       { continued: false, lineBreak: false }
@@ -649,9 +650,9 @@ const downloadFilledTemplate = async (req, res) => {
 
         try {
           doc.image(field.value, margin + labelW + 6, currentY + 6, {
-            fit:   [valueW - 12, imgRowH - 12],
+            fit: [valueW - 12, imgRowH - 12],
             align: "center",
-            valign:"center",
+            valign: "center",
           });
         } catch {
           doc.fontSize(9).font("Helvetica").fillColor(TEXT_MUTED)
@@ -726,7 +727,7 @@ const editUserProfile = async (req, res) => {
         return res.status(400).json({ success: false, message: emailErr });
 
       const emailInUser = await User.findOne({ email, _id: { $ne: userId } });
-      const emailInAdv  = await Advocate.findOne({ email });
+      const emailInAdv = await Advocate.findOne({ email });
       if (emailInUser)
         return res.status(409).json({ success: false, message: "Email already registered as a user" });
       if (emailInAdv)
@@ -736,7 +737,7 @@ const editUserProfile = async (req, res) => {
       if (!emailOTPVerified)
         return res.status(400).json({ success: false, message: "New email is not verified. Please verify via OTP first." });
 
-      updates.email           = email.toLowerCase().trim();
+      updates.email = email.toLowerCase().trim();
       updates.isEmailVerified = true;
     }
 
@@ -745,7 +746,7 @@ const editUserProfile = async (req, res) => {
         return res.status(400).json({ success: false, message: "Invalid mobile number format" });
 
       const mobileInUser = await User.findOne({ mobile, _id: { $ne: userId } });
-      const mobileInAdv  = await Advocate.findOne({ mobile });
+      const mobileInAdv = await Advocate.findOne({ mobile });
       if (mobileInUser)
         return res.status(409).json({ success: false, message: "Mobile number already registered as a user" });
       if (mobileInAdv)
@@ -755,13 +756,13 @@ const editUserProfile = async (req, res) => {
       if (!mobileOTPVerified)
         return res.status(400).json({ success: false, message: "New mobile is not verified. Please verify via OTP first." });
 
-      updates.mobile           = mobile;
+      updates.mobile = mobile;
       updates.isMobileVerified = true;
     }
 
     if (address) updates.address = address.trim();
-    if (city)    updates.city    = city.trim();
-    if (state)   updates.state   = state.trim();
+    if (city) updates.city = city.trim();
+    if (state) updates.state = state.trim();
 
     if (pincode) {
       if (!/^\d{6}$/.test(pincode))
@@ -781,14 +782,14 @@ const editUserProfile = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      data:    updatedUser,
+      data: updatedUser,
     });
 
   } catch (error) {
     console.error("editUserProfile Error:", error);
 
     if (error.code === 11000) {
-      const field      = Object.keys(error.keyPattern)[0];
+      const field = Object.keys(error.keyPattern)[0];
       const fieldNames = { email: "Email", mobile: "Mobile number" };
       return res.status(409).json({
         success: false,

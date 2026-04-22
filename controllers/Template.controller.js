@@ -115,44 +115,85 @@ const cleanPartiesForResponse = (parties) =>
 // ── CREATE TEMPLATE ──────────────────────────────────────────
 const createTemplate = async (req, res) => {
   try {
-    const { practiceArea, category, title, description, templateLayout } = req.body;
+    console.log("=== createTemplate START ===");
+    console.log("req.body:", req.body);
+    console.log("req.files:", req.files);
 
-    // ✅ Parse parties and fields from JSON string (because multipart/form-data sends them as strings)
+    const { practiceArea, category, title, description, templateLayout } = req.body;
+    console.log("Destructured fields:", { practiceArea, category, title, description, templateLayout });
+
     let parties = [];
     let fields  = [];
     try {
-      if (req.body.parties) parties = JSON.parse(req.body.parties);
-      if (req.body.fields)  fields  = JSON.parse(req.body.fields);
-    } catch {
+      console.log("req.body.parties type:", typeof req.body.parties);
+      console.log("req.body.parties value:", req.body.parties);
+      console.log("req.body.fields type:", typeof req.body.fields);
+      console.log("req.body.fields value:", req.body.fields);
+
+      if (req.body.parties) {
+        parties = typeof req.body.parties === "string"
+          ? JSON.parse(req.body.parties.trim())
+          : req.body.parties;
+        console.log("parsed parties:", JSON.stringify(parties, null, 2));
+      }
+
+      if (req.body.fields) {
+        fields = typeof req.body.fields === "string"
+          ? JSON.parse(req.body.fields.trim())
+          : req.body.fields;
+        console.log("parsed fields:", JSON.stringify(fields, null, 2));
+      }
+    } catch (e) {
+      console.error("JSON parse failed:");
+      console.error("  error message:", e.message);
+      console.error("  raw parties:", req.body.parties);
+      console.error("  raw fields:", req.body.fields);
       return res.status(400).json({ success: false, message: "Invalid JSON in parties or fields" });
     }
 
     const advocateId = req.advocate._id;
+    console.log("advocateId:", advocateId);
 
     const advocate = await Advocate.findById(advocateId).select(
       "fullName approvalStatus isActive practiceAreas categories"
     );
-    if (!advocate)
+    console.log("advocate found:", advocate ? JSON.stringify(advocate, null, 2) : "NOT FOUND");
+
+    if (!advocate) {
+      console.warn("Advocate not found for id:", advocateId);
       return res.status(404).json({ success: false, message: "Advocate not found" });
+    }
 
-    if (advocate.approvalStatus !== "approved" || !advocate.isActive)
+    if (advocate.approvalStatus !== "approved" || !advocate.isActive) {
+      console.warn("Unauthorized advocate:", { approvalStatus: advocate.approvalStatus, isActive: advocate.isActive });
       return res.status(403).json({ success: false, message: "Unauthorized advocate" });
+    }
 
-    if (!practiceArea?.trim())
+    if (!practiceArea?.trim()) {
+      console.warn("Missing practiceArea");
       return res.status(400).json({ success: false, message: "Practice area is required" });
-    if (!category?.trim())
+    }
+    if (!category?.trim()) {
+      console.warn("Missing category");
       return res.status(400).json({ success: false, message: "Category is required" });
-    if (!title?.trim())
+    }
+    if (!title?.trim()) {
+      console.warn("Missing title");
       return res.status(400).json({ success: false, message: "Template title is required" });
+    }
 
+    console.log("advocate.practiceAreas:", advocate.practiceAreas);
     if (!advocate.practiceAreas.includes(practiceArea.trim())) {
+      console.warn(`Practice area "${practiceArea}" not in advocate's areas:`, advocate.practiceAreas);
       return res.status(403).json({
         success: false,
         message: `You are not registered for practice area: "${practiceArea}". Your areas: ${advocate.practiceAreas.join(", ")}`,
       });
     }
 
+    console.log("advocate.categories:", advocate.categories);
     if (!advocate.categories.includes(category.trim())) {
+      console.warn(`Category "${category}" not in advocate's categories:`, advocate.categories);
       return res.status(403).json({
         success: false,
         message: `You are not registered for category: "${category}". Your categories: ${advocate.categories.join(", ")}`,
@@ -160,24 +201,35 @@ const createTemplate = async (req, res) => {
     }
 
     const existing = await Template.findOne({ advocateId, title: title.trim(), isActive: true });
-    if (existing)
+    console.log("existing template check:", existing ? `Found - id: ${existing._id}` : "None found");
+    if (existing) {
+      console.warn("Duplicate template title:", title.trim());
       return res.status(409).json({ success: false, message: "Template with this title already exists" });
+    }
 
-    // ✅ Build image map from uploaded files
     const imageMap = buildImageMap(req.files || [], "templateImage_");
+    console.log("imageMap:", imageMap);
 
     const hasParties = Array.isArray(parties) && parties.length > 0;
     const hasFields  = Array.isArray(fields)  && fields.length  > 0;
+    console.log("hasParties:", hasParties, "| hasFields:", hasFields);
 
     if (hasParties) {
       const partyError = validateParties(parties);
+      console.log("partyError:", partyError || "none");
       if (partyError) return res.status(400).json({ success: false, message: partyError });
     }
 
     if (hasFields) {
       const fieldError = validateFields(fields);
+      console.log("fieldError:", fieldError || "none");
       if (fieldError) return res.status(400).json({ success: false, message: fieldError });
     }
+
+    const formattedParties = hasParties ? formatParties(parties, imageMap) : [];
+    const formattedFields  = hasFields  ? formatFields(fields, imageMap)   : [];
+    console.log("formattedParties:", JSON.stringify(formattedParties, null, 2));
+    console.log("formattedFields:", JSON.stringify(formattedFields, null, 2));
 
     const template = await Template.create({
       advocateId,
@@ -187,22 +239,30 @@ const createTemplate = async (req, res) => {
       title: title.trim(),
       description: description?.trim() || "",
       templateLayout: templateLayout || "",
-      parties: hasParties ? formatParties(parties, imageMap) : [],
-      fields:  hasFields  ? formatFields(fields, imageMap)   : [],
+      parties: formattedParties,
+      fields:  formattedFields,
     });
+    console.log("Template created successfully, id:", template._id);
+
+    const responseData = {
+      ...template.toObject(),
+      parties: cleanPartiesForResponse(template.parties),
+      fields:  cleanFieldsForResponse(template.fields),
+    };
+    console.log("Response data:", JSON.stringify(responseData, null, 2));
+    console.log("=== createTemplate END ===");
 
     return res.status(201).json({
       success: true,
       message: "Template created successfully",
-      data: {
-        ...template.toObject(),
-        parties: cleanPartiesForResponse(template.parties),
-        fields:  cleanFieldsForResponse(template.fields),
-      },
+      data: responseData,
     });
 
   } catch (error) {
-    console.error("createTemplate Error:", error);
+    console.error("=== createTemplate UNHANDLED ERROR ===");
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -269,13 +329,24 @@ const editTemplate = async (req, res) => {
     if (!template)
       return res.status(404).json({ success: false, message: "Template not found" });
 
-    // ✅ Parse parties/fields from JSON string (multipart)
+    // ✅ Parse parties/fields from JSON string (multipart) or object (application/json)
     let parties;
     let fields;
     try {
-      if (req.body.parties !== undefined) parties = JSON.parse(req.body.parties);
-      if (req.body.fields  !== undefined) fields  = JSON.parse(req.body.fields);
-    } catch {
+      if (req.body.parties !== undefined) {
+        parties = typeof req.body.parties === "string"
+          ? JSON.parse(req.body.parties.trim())
+          : req.body.parties;
+      }
+      if (req.body.fields !== undefined) {
+        fields = typeof req.body.fields === "string"
+          ? JSON.parse(req.body.fields.trim())
+          : req.body.fields;
+      }
+    } catch (e) {
+      console.error("JSON parse failed:", e.message);
+      console.error("raw parties:", req.body.parties);
+      console.error("raw fields:", req.body.fields);
       return res.status(400).json({ success: false, message: "Invalid JSON in parties or fields" });
     }
 
@@ -370,7 +441,7 @@ const editTemplate = async (req, res) => {
         const fieldError = validateFields(fields);
         if (fieldError) return res.status(400).json({ success: false, message: fieldError });
 
-        const formatted         = formatFields(fields, imageMap);
+        const formatted          = formatFields(fields, imageMap);
         const existingFieldNames = new Set(template.fields.map((f) => f.fieldName.toLowerCase()));
 
         // ✅ Update image paths for existing image fields
