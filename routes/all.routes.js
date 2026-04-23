@@ -23,8 +23,9 @@ const {
   templateImageUpload,
   filledTemplateImageUpload,
   handleUploadError,
+  companyUpload
 } = require("../middlewares/upload.middleware");
-const { UserverifyDocuments, registerUser, getUSerProfile, getAdvocatesForUser,getTemplatesForUser,fillTemplate,downloadFilledTemplate,editUserProfile} = require("../controllers/User.controller");
+const { UserverifyDocuments, registerUser, getUSerProfile, getAdvocatesForUser,getTemplatesForUser,fillTemplate,downloadFilledTemplate,editUserProfile,registerCompany} = require("../controllers/User.controller");
 const {
   getAllAdvocates, getAdvocateDetails,
   verifyAdvocateDocuments,
@@ -69,8 +70,10 @@ router.post("/templates/:templateId/fill",filledTemplateImageUpload, handleUploa
 router.get("/template/download/:submissionId", userAuth, downloadFilledTemplate);
 router.get("/user/mybooking", userAuth, getUserCases);
 router.get("/user/profile",userAuth, getUSerProfile);
-router.put("/user/profile/edit",userAuth,   editUserProfile,              // ✅ newly added
+router.put("/user/profile/edit",userAuth,   editUserProfile,             
 );
+
+router.post("/company/register", companyUpload, handleUploadError, registerCompany);
 
 
 

@@ -103,6 +103,12 @@ const userUpload = upload.fields([
   { name: "panCard",      maxCount: 1 },
 ]);
 
+// ─── Company documents upload ─────────────────────────────
+const companyUpload = upload.fields([
+  { name: "registrationCertificate", maxCount: 1 },
+  { name: "authorizationLetter",     maxCount: 1 },
+]);
+
 // ─── Recording upload ─────────────────────────────────────
 const recordingUpload = upload.single("recording");
 
@@ -141,6 +147,7 @@ const handleUploadError = (err, req, res, next) => {
 module.exports = {
   advocateUpload,
   userUpload,
+  companyUpload,              // ✅ for registerCompany document upload
   recordingUpload,
   templateImageUpload,        // ✅ for createTemplate / editTemplate
   filledTemplateImageUpload,  // ✅ for fillTemplate

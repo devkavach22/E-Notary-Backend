@@ -201,6 +201,177 @@ const registerUser = async (req, res) => {
 };
 
 
+// ── REGISTER COMPANY ─────────────────────────────────────────
+const registerCompany = async (req, res) => {
+  try {
+    console.log("\n========== REGISTER COMPANY ==========");
+    console.log("Body fields:", JSON.stringify(req.body, null, 2));
+    console.log("Files received:", req.files ? Object.keys(req.files) : "none");
+
+    const {
+      // account credentials
+      email, mobile, password,
+
+      // company basic info
+      companyName, entityType, registrationNumber, gstNumber,
+
+      // authorized person
+      authorizedPersonName, authorizedPersonDesignation,
+      authorizedPersonEmail, authorizedPersonMobile,
+
+      // address
+      registeredOfficeAddress, businessAddress,
+      companyCity, companyState, companyPincode,
+    } = req.body;
+
+    // ── File paths — req.files se lo (multer ne upload kiya) ──
+    const registrationCertificatePath = req.files?.registrationCertificate?.[0]?.path;
+    const authorizationLetterPath     = req.files?.authorizationLetter?.[0]?.path;
+
+    console.log("registrationCertificatePath:", registrationCertificatePath);
+    console.log("authorizationLetterPath    :", authorizationLetterPath);
+    console.log("=======================================\n");
+
+    // ── 1. Required field check ──────────────────────────────
+    if (
+      !email || !mobile || !password ||
+      !companyName || !entityType || !registrationNumber ||
+      !authorizedPersonName || !authorizedPersonDesignation ||
+      !authorizedPersonEmail || !authorizedPersonMobile ||
+      !registeredOfficeAddress || !companyCity || !companyState || !companyPincode ||
+      !registrationCertificatePath || !authorizationLetterPath
+    ) {
+      console.log("❌ Missing fields detected");
+      return res.status(400).json({ success: false, message: "All required fields must be provided" });
+    }
+
+    // ── 2. Credential validations ────────────────────────────
+    const emailErr = validateEmail(email);
+    if (emailErr) return res.status(400).json({ success: false, message: emailErr });
+
+    const passwordErr = validatePassword(password);
+    if (passwordErr) return res.status(400).json({ success: false, message: passwordErr });
+
+    if (!/^[6-9]\d{9}$/.test(mobile))
+      return res.status(400).json({ success: false, message: "Invalid mobile number" });
+
+    // ── 3. GST validation (optional but strictly validated if provided) ──
+    if (gstNumber) {
+      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstRegex.test(gstNumber.trim().toUpperCase()))
+        return res.status(400).json({ success: false, message: "Invalid GST number format" });
+    }
+
+    // ── 4. Pincode validation ────────────────────────────────
+    if (!/^\d{6}$/.test(companyPincode))
+      return res.status(400).json({ success: false, message: "Invalid pincode" });
+
+    // ── 5. Authorized person mobile validation ───────────────
+    if (!/^[6-9]\d{9}$/.test(authorizedPersonMobile))
+      return res.status(400).json({ success: false, message: "Invalid authorized person mobile number" });
+
+    // ── 6. Authorized person email validation ────────────────
+    const authEmailErr = validateEmail(authorizedPersonEmail);
+    if (authEmailErr)
+      return res.status(400).json({ success: false, message: `Authorized person email: ${authEmailErr}` });
+
+    // ── 7. Duplicate checks ──────────────────────────────────
+    const emailInUser = await User.findOne({ email });
+    const emailInAdv  = await Advocate.findOne({ email });
+    if (emailInUser || emailInAdv)
+      return res.status(409).json({ success: false, message: "Email already registered" });
+
+    const mobileInUser = await User.findOne({ mobile });
+    const mobileInAdv  = await Advocate.findOne({ mobile });
+    if (mobileInUser || mobileInAdv)
+      return res.status(409).json({ success: false, message: "Mobile number already registered" });
+
+    if (await User.findOne({ registrationNumber: registrationNumber.trim().toUpperCase() }))
+      return res.status(409).json({ success: false, message: "Company registration number already registered" });
+
+    if (gstNumber && await User.findOne({ gstNumber: gstNumber.trim().toUpperCase() }))
+      return res.status(409).json({ success: false, message: "GST number already registered" });
+
+    // ── 8. OTP verification ──────────────────────────────────
+    const emailVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
+    if (!emailVerified)
+      return res.status(400).json({ success: false, message: "Email is not verified. Please verify your email first" });
+
+    const mobileVerified = await OTP.findOne({ mobile, purpose: "mobile_verify", isUsed: true });
+    if (!mobileVerified)
+      return res.status(400).json({ success: false, message: "Mobile is not verified. Please verify your mobile first" });
+
+    // ── 9. Create company user ───────────────────────────────
+    const companyUser = await User.create({
+      email,
+      mobile,
+      password,
+      role: "company",
+
+      companyName:        companyName.trim(),
+      entityType:         entityType.trim(),
+      registrationNumber: registrationNumber.trim().toUpperCase(),
+      ...(gstNumber && { gstNumber: gstNumber.trim().toUpperCase() }),
+
+      authorizedPerson: {
+        fullName:    authorizedPersonName.trim(),
+        designation: authorizedPersonDesignation.trim(),
+        email:       authorizedPersonEmail.trim().toLowerCase(),
+        mobile:      authorizedPersonMobile.trim(),
+      },
+
+      registeredOfficeAddress: registeredOfficeAddress.trim(),
+      ...(businessAddress && { businessAddress: businessAddress.trim() }),
+      companyCity:    companyCity.trim(),
+      companyState:   companyState.trim(),
+      companyPincode: companyPincode.trim(),
+
+      companyDocuments: {
+        registrationCertificate: registrationCertificatePath,
+        authorizationLetter:     authorizationLetterPath,
+      },
+
+      isEmailVerified:  true,
+      isMobileVerified: true,
+    });
+
+    console.log("✅ Company registered:", companyUser._id);
+
+    return res.status(201).json({
+      success: true,
+      message: "Company registered successfully.",
+      data: {
+        id:          companyUser._id,
+        companyName: companyUser.companyName,
+        email:       companyUser.email,
+        role:        companyUser.role,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ registerCompany Error:", error);
+
+    if (error.name === "ValidationError") {
+      const msgs = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ success: false, message: msgs[0] });
+    }
+
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue)[0];
+      const fieldLabels = {
+        email:              "Email",
+        mobile:             "Mobile number",
+        registrationNumber: "Registration number",
+        gstNumber:          "GST number",
+      };
+      const label = fieldLabels[field] || field;
+      return res.status(409).json({ success: false, message: `${label} is already registered` });
+    }
+
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 const getUSerProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select("-password");
@@ -804,6 +975,7 @@ const editUserProfile = async (req, res) => {
 module.exports = {
   UserverifyDocuments,
   registerUser,
+  registerCompany,
   getUSerProfile,
   getAdvocatesForUser,
   getTemplatesForUser,

@@ -75,7 +75,6 @@ const userAuth = async (req, res, next) => {
   }
 };
 
-
 const advocateAuth = async (req, res, next) => {
   try {
     const token = req.headers.authorization;
@@ -121,4 +120,5 @@ const advocateAuth = async (req, res, next) => {
   }
 };
 
-module.exports = { adminAuth, userAuth, advocateAuth }; 
+
+module.exports = { adminAuth, userAuth, advocateAuth };

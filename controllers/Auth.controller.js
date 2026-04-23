@@ -35,14 +35,15 @@ const login = async (req, res) => {
     if (!role)
       return res.status(400).json({ success: false, message: "Role is required" });
 
-    if (!["admin", "advocate", "user"].includes(role))
-      return res.status(400).json({ success: false, message: "Invalid role. Must be admin, advocate or user" });
+    if (!["admin", "advocate", "user", "company"].includes(role))
+      return res.status(400).json({ success: false, message: "Invalid role. Must be admin, advocate, user or company" });
 
     // ── Find user based on role ──
     let user;
     if (role === "admin")    user = await Admin.findOne({ email }).select("+password");
     if (role === "advocate") user = await Advocate.findOne({ email }).select("+password");
-    if (role === "user")     user = await User.findOne({ email }).select("+password");
+    if (role === "user")     user = await User.findOne({ email, role: "user" }).select("+password");
+    if (role === "company")  user = await User.findOne({ email, role: "company" }).select("+password");
 
     if (!user)
       return res.status(404).json({ success: false, message: `No ${role} account found with this email` });
@@ -82,6 +83,14 @@ const login = async (req, res) => {
         });
     }
 
+    // ── Company-specific active check ──
+    if (role === "company" && !user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Your company account is deactivated",
+      });
+    }
+
     const token = generateToken(user._id, role);
 
     return res.status(200).json({
@@ -99,10 +108,14 @@ const login = async (req, res) => {
           fullName:       user.fullName,
           approvalStatus: user.approvalStatus,
           practiceAreas:  user.practiceAreas,
-          category: user.categories,
+          category:       user.categories,
         }),
         ...(role === "user" && {
           fullName: user.fullName,
+        }),
+        ...(role === "company" && {
+          companyName:   user.companyName,
+          entityType:    user.entityType,
         }),
       },
     });
@@ -124,7 +137,7 @@ const sendForgetPasswordOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // ── Check Admin → Advocate → User ──
+    // ── Check Admin → Advocate → User (covers both "user" and "company" roles) ──
     let user = await Admin.findOne({ email });
     if (!user) user = await Advocate.findOne({ email });
     if (!user) user = await User.findOne({ email });
@@ -217,13 +230,13 @@ const confirmPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
 
-    // ── Role ke basis pe model choose karo ──
+    // ── Role ke basis pe model choose karo (company bhi User model use karta hai) ──
     const { role } = record;
     const Model = role === "admin"
       ? Admin
       : role === "advocate"
       ? Advocate
-      : User;
+      : User;  // covers both "user" and "company"
 
     const user = await Model.findOne({ email }).select("+password");
 
