@@ -278,12 +278,12 @@ const registerCompany = async (req, res) => {
     // ── 7. Duplicate checks ──────────────────────────────────
     const emailInUser = await User.findOne({ email });
     const emailInAdv  = await Advocate.findOne({ email });
-    if (emailInUser || emailInAdv)
+    if (emailInUser && emailInAdv)
       return res.status(409).json({ success: false, message: "Email already registered" });
 
     const mobileInUser = await User.findOne({ mobile });
     const mobileInAdv  = await Advocate.findOne({ mobile });
-    if (mobileInUser || mobileInAdv)
+    if (mobileInUser && mobileInAdv)
       return res.status(409).json({ success: false, message: "Mobile number already registered" });
 
     if (await User.findOne({ registrationNumber: registrationNumber.trim().toUpperCase() }))
