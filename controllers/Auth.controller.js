@@ -3,6 +3,7 @@ const Advocate = require("../models/Advocate");
 const Admin    = require("../models/Admin");
 const User     = require("../models/User");
 const OTP      = require("../models/OTP");
+const bcrypt   = require("bcryptjs");
 const { generateOTP, sendForgetPasswordOTP } = require("./sendOTP");
 
 // ─── Generate Token ───────────────────────────────────────
@@ -14,10 +15,9 @@ const generateToken = (id, role) => {
 
 // ─── Password Validator ───────────────────────────────────
 const validatePassword = (password) => {
-  if (!password)                return "Password is required";
-  if (password.length < 8)     return "Password must be at least 8 characters";
-  if (password.length > 28)    return "Password must not exceed 28 characters";
-  if (!/[A-Z]/.test(password)) return "Password must contain at least one capital letter";
+  if (!password)            return "Password is required";
+  if (password.length < 8)  return "Password must be at least 8 characters";
+  if (password.length > 28) return "Password must not exceed 28 characters";
   return null;
 };
 
@@ -114,8 +114,8 @@ const login = async (req, res) => {
           fullName: user.fullName,
         }),
         ...(role === "company" && {
-          companyName:   user.companyName,
-          entityType:    user.entityType,
+          companyName: user.companyName,
+          entityType:  user.entityType,
         }),
       },
     });
@@ -126,44 +126,52 @@ const login = async (req, res) => {
   }
 };
 
+
 // ─────────────────────────────────────────────────────────
 // @route   POST /api/send-forget-password-otp
 // ─────────────────────────────────────────────────────────
 const sendForgetPasswordOtp = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, role } = req.body; // ✅ role add kiya
 
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // ── Check Admin → Advocate → User (covers both "user" and "company" roles) ──
-    let user = await Admin.findOne({ email });
-    if (!user) user = await Advocate.findOne({ email });
-    if (!user) user = await User.findOne({ email });
+    // ✅ Role validate karo
+    if (!role || !["admin", "advocate", "user", "company"].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Role is required. Must be admin, advocate, user or company",
+      });
+    }
+
+    // ✅ Role ke basis pe sahi collection mein dhundho
+    let user;
+    if (role === "admin")    user = await Admin.findOne({ email });
+    if (role === "advocate") user = await Advocate.findOne({ email });
+    if (role === "user")     user = await User.findOne({ email, role: "user" });
+    if (role === "company")  user = await User.findOne({ email, role: "company" });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "No account found with this email",
+        message: `No ${role} account found with this email`,
       });
     }
 
-    const role = user.role;
-    const otp  = generateOTP();
+    const otp = generateOTP();
 
-    // ── Purane forget_password OTPs delete karo is email ke ──
     await OTP.deleteMany({ email, purpose: "forget_password" });
 
-    // ── Naya OTP MongoDB mein save karo ──
     await OTP.create({
       email,
       otp,
       purpose:              "forget_password",
-      role,
+      role,                 // ✅ frontend se aaya sahi role save hoga
       isUsed:               false,
       passwordResetPending: true,
-      expiresAt:            new Date(Date.now() + 10 * 60 * 1000), // 10 min
+      expiresAt:            new Date(Date.now() + 10 * 60 * 1000),
     });
 
     await sendForgetPasswordOTP(email, otp);
@@ -186,7 +194,6 @@ const confirmPassword = async (req, res) => {
   try {
     const { email, otp, newPassword, confirmPassword } = req.body;
 
-    // ── Required fields ──
     if (!email || !otp || !newPassword || !confirmPassword) {
       return res.status(400).json({
         success: false,
@@ -194,18 +201,15 @@ const confirmPassword = async (req, res) => {
       });
     }
 
-    // ── Passwords match ──
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ success: false, message: "Passwords do not match" });
     }
 
-    // ── Password strength validation ──
     const passwordErr = validatePassword(newPassword);
     if (passwordErr) {
       return res.status(400).json({ success: false, message: passwordErr });
     }
 
-    // ── DB se OTP record fetch karo ──
     const record = await OTP.findOne({
       email,
       purpose: "forget_password",
@@ -216,7 +220,6 @@ const confirmPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: "Please request an OTP first" });
     }
 
-    // ── Expiry check ──
     if (new Date() > new Date(record.expiresAt)) {
       await OTP.deleteMany({ email, purpose: "forget_password" });
       return res.status(400).json({
@@ -225,30 +228,41 @@ const confirmPassword = async (req, res) => {
       });
     }
 
-    // ── OTP match check ──
     if (record.otp !== otp.toString()) {
       return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
 
-    // ── Role ke basis pe model choose karo (company bhi User model use karta hai) ──
+    // ✅ OTP record mein sahi role hai — sahi model aur query banao
     const { role } = record;
+
     const Model = role === "admin"
       ? Admin
       : role === "advocate"
       ? Advocate
-      : User;  // covers both "user" and "company"
+      : User;
 
-    const user = await Model.findOne({ email }).select("+password");
+    // ✅ User/Company ke liye role filter bhi lagao
+    const query = (role === "user" || role === "company")
+      ? { email, role }
+      : { email };
+
+    const user = await Model.findOne(query).select("+password");
 
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // ── Naya password save karo ──
-    user.password = newPassword;
-    await user.save();
+    // ✅ Manually hash karke findOneAndUpdate se save karo
+    // pre-save hook trigger nahi hoga — double hashing nahi hogi
+    const salt           = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    // ── OTP delete karo → login unblock ──
+    await Model.findOneAndUpdate(
+      query,
+      { $set: { password: hashedPassword } },
+      { returnDocument: "after" } // ✅ mongoose warning bhi fix
+    );
+
     await OTP.deleteMany({ email, purpose: "forget_password" });
 
     return res.status(200).json({
@@ -260,6 +274,5 @@ const confirmPassword = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-
 
 module.exports = { login, sendForgetPasswordOtp, confirmPassword };
