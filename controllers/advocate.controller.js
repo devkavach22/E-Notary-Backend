@@ -551,12 +551,16 @@ const editAdvocateProfile = async (req, res) => {
 
       const emailInAdv  = await Advocate.findOne({ email, _id: { $ne: advocateId } });
       const emailInUser = await User.findOne({ email });
+
+      // Block only if exists in BOTH (mirrors register logic)
+      if (emailInAdv && emailInUser)
+        return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
+
       if (emailInAdv)
         return res.status(409).json({ success: false, message: "Email already registered as an advocate" });
-      if (emailInUser)
-        return res.status(409).json({ success: false, message: "Email already registered as a user" });
 
-      // New email must be OTP-verified
+      // ✅ If only in User → allowed (same as register)
+
       const emailOTPVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
       if (!emailOTPVerified)
         return res.status(400).json({ success: false, message: "New email is not verified. Please verify via OTP first." });
@@ -575,12 +579,16 @@ const editAdvocateProfile = async (req, res) => {
 
       const mobileInAdv  = await Advocate.findOne({ mobile, _id: { $ne: advocateId } });
       const mobileInUser = await User.findOne({ mobile });
+
+      // Block only if exists in BOTH (mirrors register logic)
+      if (mobileInAdv && mobileInUser)
+        return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
+
       if (mobileInAdv)
         return res.status(409).json({ success: false, message: "Mobile number already registered as an advocate" });
-      if (mobileInUser)
-        return res.status(409).json({ success: false, message: "Mobile number already registered as a user" });
 
-      // New mobile must be OTP-verified
+      // ✅ If only in User → allowed (same as register)
+
       const mobileOTPVerified = await OTP.findOne({ mobile, purpose: "mobile_verify", isUsed: true });
       if (!mobileOTPVerified)
         return res.status(400).json({ success: false, message: "New mobile is not verified. Please verify via OTP first." });

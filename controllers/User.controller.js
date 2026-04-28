@@ -226,7 +226,7 @@ const registerCompany = async (req, res) => {
 
     // ── File paths — req.files se lo (multer ne upload kiya) ──
     const registrationCertificatePath = req.files?.registrationCertificate?.[0]?.path;
-    const authorizationLetterPath     = req.files?.authorizationLetter?.[0]?.path;
+    const authorizationLetterPath = req.files?.authorizationLetter?.[0]?.path;
 
     console.log("registrationCertificatePath:", registrationCertificatePath);
     console.log("authorizationLetterPath    :", authorizationLetterPath);
@@ -277,12 +277,12 @@ const registerCompany = async (req, res) => {
 
     // ── 7. Duplicate checks ──────────────────────────────────
     const emailInUser = await User.findOne({ email });
-    const emailInAdv  = await Advocate.findOne({ email });
+    const emailInAdv = await Advocate.findOne({ email });
     if (emailInUser && emailInAdv)
       return res.status(409).json({ success: false, message: "Email already registered" });
 
     const mobileInUser = await User.findOne({ mobile });
-    const mobileInAdv  = await Advocate.findOne({ mobile });
+    const mobileInAdv = await Advocate.findOne({ mobile });
     if (mobileInUser && mobileInAdv)
       return res.status(409).json({ success: false, message: "Mobile number already registered" });
 
@@ -308,30 +308,30 @@ const registerCompany = async (req, res) => {
       password,
       role: "company",
 
-      companyName:        companyName.trim(),
-      entityType:         entityType.trim(),
+      companyName: companyName.trim(),
+      entityType: entityType.trim(),
       registrationNumber: registrationNumber.trim().toUpperCase(),
       ...(gstNumber && { gstNumber: gstNumber.trim().toUpperCase() }),
 
       authorizedPerson: {
-        fullName:    authorizedPersonName.trim(),
+        fullName: authorizedPersonName.trim(),
         designation: authorizedPersonDesignation.trim(),
-        email:       authorizedPersonEmail.trim().toLowerCase(),
-        mobile:      authorizedPersonMobile.trim(),
+        email: authorizedPersonEmail.trim().toLowerCase(),
+        mobile: authorizedPersonMobile.trim(),
       },
 
       registeredOfficeAddress: registeredOfficeAddress.trim(),
       ...(businessAddress && { businessAddress: businessAddress.trim() }),
-      companyCity:    companyCity.trim(),
-      companyState:   companyState.trim(),
+      companyCity: companyCity.trim(),
+      companyState: companyState.trim(),
       companyPincode: companyPincode.trim(),
 
       companyDocuments: {
         registrationCertificate: registrationCertificatePath,
-        authorizationLetter:     authorizationLetterPath,
+        authorizationLetter: authorizationLetterPath,
       },
 
-      isEmailVerified:  true,
+      isEmailVerified: true,
       isMobileVerified: true,
     });
 
@@ -341,10 +341,10 @@ const registerCompany = async (req, res) => {
       success: true,
       message: "Company registered successfully.",
       data: {
-        id:          companyUser._id,
+        id: companyUser._id,
         companyName: companyUser.companyName,
-        email:       companyUser.email,
-        role:        companyUser.role,
+        email: companyUser.email,
+        role: companyUser.role,
       },
     });
 
@@ -359,10 +359,10 @@ const registerCompany = async (req, res) => {
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
       const fieldLabels = {
-        email:              "Email",
-        mobile:             "Mobile number",
+        email: "Email",
+        mobile: "Mobile number",
         registrationNumber: "Registration number",
-        gstNumber:          "GST number",
+        gstNumber: "GST number",
       };
       const label = fieldLabels[field] || field;
       return res.status(409).json({ success: false, message: `${label} is already registered` });
@@ -883,14 +883,18 @@ const downloadFilledTemplate = async (req, res) => {
 const editUserProfile = async (req, res) => {
   try {
     const userId = req.user._id;
-
-    const { email, mobile, address, city, state, pincode } = req.body;
+    const userRole = req.user.role; // "user" or "company"
 
     const user = await User.findById(userId);
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
 
     const updates = {};
+
+    // ════════════════════════════════════════════════════
+    // 1. EMAIL
+    // ════════════════════════════════════════════════════
+    const { email, mobile } = req.body;
 
     if (email && email !== user.email) {
       const emailErr = validateEmail(email);
@@ -899,10 +903,15 @@ const editUserProfile = async (req, res) => {
 
       const emailInUser = await User.findOne({ email, _id: { $ne: userId } });
       const emailInAdv = await Advocate.findOne({ email });
+
+      // Block only if exists in BOTH (mirrors register logic)
+      if (emailInUser && emailInAdv)
+        return res.status(409).json({ success: false, message: "Email already registered in both accounts" });
+
       if (emailInUser)
         return res.status(409).json({ success: false, message: "Email already registered as a user" });
-      if (emailInAdv)
-        return res.status(409).json({ success: false, message: "Email already registered as an advocate" });
+
+      // ✅ If only in Advocate → allowed (same as register)
 
       const emailOTPVerified = await OTP.findOne({ email, purpose: "email_verify", isUsed: true });
       if (!emailOTPVerified)
@@ -912,16 +921,24 @@ const editUserProfile = async (req, res) => {
       updates.isEmailVerified = true;
     }
 
+    // ════════════════════════════════════════════════════
+    // 2. MOBILE
+    // ════════════════════════════════════════════════════
     if (mobile && mobile !== user.mobile) {
       if (!/^[6-9]\d{9}$/.test(mobile))
         return res.status(400).json({ success: false, message: "Invalid mobile number format" });
 
       const mobileInUser = await User.findOne({ mobile, _id: { $ne: userId } });
       const mobileInAdv = await Advocate.findOne({ mobile });
+
+      // Block only if exists in BOTH (mirrors register logic)
+      if (mobileInUser && mobileInAdv)
+        return res.status(409).json({ success: false, message: "Mobile number already registered in both accounts" });
+
       if (mobileInUser)
         return res.status(409).json({ success: false, message: "Mobile number already registered as a user" });
-      if (mobileInAdv)
-        return res.status(409).json({ success: false, message: "Mobile number already registered as an advocate" });
+
+      // ✅ If only in Advocate → allowed (same as register)
 
       const mobileOTPVerified = await OTP.findOne({ mobile, purpose: "mobile_verify", isUsed: true });
       if (!mobileOTPVerified)
@@ -931,19 +948,49 @@ const editUserProfile = async (req, res) => {
       updates.isMobileVerified = true;
     }
 
-    if (address) updates.address = address.trim();
-    if (city) updates.city = city.trim();
-    if (state) updates.state = state.trim();
+    // ════════════════════════════════════════════════════
+    // 3. ROLE-BASED ADDRESS FIELDS
+    // ════════════════════════════════════════════════════
+    if (userRole === "company") {
+      const {
+        registeredOfficeAddress,
+        businessAddress,
+        companyCity,
+        companyState,
+        companyPincode,
+      } = req.body;
 
-    if (pincode) {
-      if (!/^\d{6}$/.test(pincode))
-        return res.status(400).json({ success: false, message: "Invalid pincode. Must be 6 digits." });
-      updates.pincode = pincode;
+      if (registeredOfficeAddress) updates.registeredOfficeAddress = registeredOfficeAddress.trim();
+      if (businessAddress) updates.businessAddress = businessAddress.trim();
+      if (companyCity) updates.companyCity = companyCity.trim();
+      if (companyState) updates.companyState = companyState.trim();
+
+      if (companyPincode) {
+        if (!/^\d{6}$/.test(companyPincode))
+          return res.status(400).json({ success: false, message: "Invalid pincode. Must be 6 digits." });
+        updates.companyPincode = companyPincode;
+      }
+
+    } else {
+      // role === "user"
+      const { address, city, state, pincode } = req.body;
+
+      if (address) updates.address = address.trim();
+      if (city) updates.city = city.trim();
+      if (state) updates.state = state.trim();
+
+      if (pincode) {
+        if (!/^\d{6}$/.test(pincode))
+          return res.status(400).json({ success: false, message: "Invalid pincode. Must be 6 digits." });
+        updates.pincode = pincode;
+      }
     }
 
+    // ── Nothing to update? ───────────────────────────────
     if (Object.keys(updates).length === 0)
       return res.status(400).json({ success: false, message: "No valid fields provided to update" });
 
+    // ── Apply updates ────────────────────────────────────
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: updates },
