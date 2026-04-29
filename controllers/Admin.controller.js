@@ -1,7 +1,8 @@
 const Advocate = require("../models/Advocate");
-const User     = require("../models/User");
+const User = require("../models/User");
 const { sendApprovalEmail, sendRejectionEmail } = require("./sendOTP");
-
+const Template = require("../models/Template");
+const UserFilledTemplate = require("../models/UserFilledTemplate");
 
 // BAR COUNCIL STATE CODE MAPPING
 
@@ -58,13 +59,30 @@ const getAllAdvocates = async (req, res) => {
   try {
     const advocates = await Advocate.find()
       .select("-password")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const advocatesWithStats = await Promise.all(
+      advocates.map(async (advocate) => {
+        const [distinctUsers, templateCount] = await Promise.all([
+          UserFilledTemplate.distinct("userId", { advocateId: advocate._id }),
+          Template.countDocuments({ advocateId: advocate._id }),
+        ]);
+
+        return {
+          ...advocate,
+          totalUsers: distinctUsers.length,
+          totalTemplates: templateCount,
+        };
+      })
+    );
 
     return res.status(200).json({
       success: true,
-      total:   advocates.length,
-      data:    advocates,
+      total: advocates.length,
+      data: advocatesWithStats,
     });
+
   } catch (error) {
     console.error("getAllAdvocates Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
@@ -80,8 +98,8 @@ const getPendingAdvocates = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      total:   advocates.length,
-      data:    advocates,
+      total: advocates.length,
+      data: advocates,
     });
   } catch (error) {
     console.error("getPendingAdvocates Error:", error);
@@ -127,13 +145,13 @@ const verifyAdvocateDocuments = async (req, res) => {
       return res.status(400).json({ success: false, message: "No documents uploaded yet" });
 
     const mismatches = [];
-    const results    = {};
+    const results = {};
 
     // ── Bar Council State Check (no OCR — prefix match only) ──
     console.log("\n========== ADMIN VERIFY — BAR COUNCIL STATE CHECK ==========");
     try {
       const stateMatched = barCouncilStateMatches(advocate.barCouncilNumber, advocate.barCouncilState);
-      const mappedState  = getStateFromBarCouncilNumber(advocate.barCouncilNumber);
+      const mappedState = getStateFromBarCouncilNumber(advocate.barCouncilNumber);
 
       console.log(
         "State check:", advocate.barCouncilNumber,
@@ -150,15 +168,15 @@ const verifyAdvocateDocuments = async (req, res) => {
       }
 
       results.barCouncilNumber = {
-        db:      advocate.barCouncilNumber,
+        db: advocate.barCouncilNumber,
         matched: true,
-        note:    "OCR bypassed — state prefix validated only",
+        note: "OCR bypassed — state prefix validated only",
       };
       results.barCouncilState = {
-        bcnCode:         advocate.barCouncilNumber?.split("/")[0],
+        bcnCode: advocate.barCouncilNumber?.split("/")[0],
         mappedState,
         registeredState: advocate.barCouncilState,
-        matched:         stateMatched,
+        matched: stateMatched,
       };
 
     } catch (err) {
@@ -170,10 +188,10 @@ const verifyAdvocateDocuments = async (req, res) => {
     // NOTE: OCR verification skipped for development.
     //       Will be replaced with Government API on production.
     results.aadhaarNumber = { db: advocate.aadhaarNumber, matched: true, note: "OCR bypassed" };
-    results.panNumber     = { db: advocate.panNumber,     matched: true, note: "OCR bypassed" };
-    results.fullName      = { db: advocate.fullName,      matched: true, note: "OCR bypassed" };
-    results.dateOfBirth   = { db: advocate.dateOfBirth,   matched: true, note: "OCR bypassed" };
-    results.gender        = { db: advocate.gender,        matched: true, note: "OCR bypassed" };
+    results.panNumber = { db: advocate.panNumber, matched: true, note: "OCR bypassed" };
+    results.fullName = { db: advocate.fullName, matched: true, note: "OCR bypassed" };
+    results.dateOfBirth = { db: advocate.dateOfBirth, matched: true, note: "OCR bypassed" };
+    results.gender = { db: advocate.gender, matched: true, note: "OCR bypassed" };
 
     console.log("\n========== VERIFY RESULTS ==========");
     console.log("Mismatches:", mismatches);
@@ -181,9 +199,9 @@ const verifyAdvocateDocuments = async (req, res) => {
 
     // ── If Bar Council state mismatch — reject ─────────────
     if (mismatches.length > 0) {
-      advocate.documentStatus  = "rejected";
-      advocate.approvalStatus  = "rejected";
-      advocate.isActive        = false;
+      advocate.documentStatus = "rejected";
+      advocate.approvalStatus = "rejected";
+      advocate.isActive = false;
       advocate.rejectionReason = mismatches.join(" | ");
       await advocate.save();
 
@@ -194,8 +212,8 @@ const verifyAdvocateDocuments = async (req, res) => {
       }
 
       return res.status(400).json({
-        success:    false,
-        message:    "Document verification failed. Advocate has been auto-rejected and notified via email.",
+        success: false,
+        message: "Document verification failed. Advocate has been auto-rejected and notified via email.",
         mismatches,
         results,
       });
@@ -210,9 +228,9 @@ const verifyAdvocateDocuments = async (req, res) => {
       message: `All documents verified successfully for "${advocate.fullName}". You can now approve.`,
       results,
       data: {
-        id:             advocate._id,
-        fullName:       advocate.fullName,
-        email:          advocate.email,
+        id: advocate._id,
+        fullName: advocate.fullName,
+        email: advocate.email,
         documentStatus: advocate.documentStatus,
         approvalStatus: advocate.approvalStatus,
       },
@@ -240,9 +258,9 @@ const approveAdvocate = async (req, res) => {
     if (advocate.documentStatus !== "verified")
       return res.status(400).json({ success: false, message: "Please run document verification first before approving" });
 
-    advocate.approvalStatus  = "approved";
-    advocate.documentStatus  = "approved";
-    advocate.isActive        = true;
+    advocate.approvalStatus = "approved";
+    advocate.documentStatus = "approved";
+    advocate.isActive = true;
     advocate.rejectionReason = null;
     await advocate.save();
 
@@ -256,12 +274,12 @@ const approveAdvocate = async (req, res) => {
       success: true,
       message: `Advocate "${advocate.fullName}" has been approved successfully.`,
       data: {
-        id:             advocate._id,
-        fullName:       advocate.fullName,
-        email:          advocate.email,
+        id: advocate._id,
+        fullName: advocate.fullName,
+        email: advocate.email,
         approvalStatus: advocate.approvalStatus,
         documentStatus: advocate.documentStatus,
-        isActive:       advocate.isActive,
+        isActive: advocate.isActive,
       },
     });
   } catch (error) {
@@ -288,9 +306,9 @@ const rejectAdvocate = async (req, res) => {
     if (advocate.approvalStatus === "rejected")
       return res.status(400).json({ success: false, message: "Advocate is already rejected" });
 
-    advocate.approvalStatus  = "rejected";
-    advocate.documentStatus  = "rejected";
-    advocate.isActive        = false;
+    advocate.approvalStatus = "rejected";
+    advocate.documentStatus = "rejected";
+    advocate.isActive = false;
     advocate.rejectionReason = reason.trim();
     await advocate.save();
 
@@ -304,12 +322,12 @@ const rejectAdvocate = async (req, res) => {
       success: true,
       message: `Advocate "${advocate.fullName}" has been rejected.`,
       data: {
-        id:              advocate._id,
-        fullName:        advocate.fullName,
-        email:           advocate.email,
-        approvalStatus:  advocate.approvalStatus,
-        documentStatus:  advocate.documentStatus,
-        isActive:        advocate.isActive,
+        id: advocate._id,
+        fullName: advocate.fullName,
+        email: advocate.email,
+        approvalStatus: advocate.approvalStatus,
+        documentStatus: advocate.documentStatus,
+        isActive: advocate.isActive,
         rejectionReason: advocate.rejectionReason,
       },
     });
@@ -330,8 +348,8 @@ const getAllUsers = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      total:   users.length,
-      data:    users,
+      total: users.length,
+      data: users,
     });
   } catch (error) {
     console.error("getAllUsers Error:", error);
@@ -355,6 +373,40 @@ const getUserDetails = async (req, res) => {
   }
 };
 
+
+const getDashboardStats = async (req, res) => {
+  try {
+    const [
+      totalAdvocates,
+      totalTemplates,
+      users,
+    ] = await Promise.all([
+      Advocate.countDocuments({ isActive: true }),
+      Template.countDocuments(),
+      User.find({ isActive: true }).select("_id fullName email mobile").lean(),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        totalAdvocates,
+        totalUsers: users.length,
+        totalTemplates,
+        users: users.map((u) => ({
+          _id: u._id,
+          fullName: u.fullName,
+          email: u.email,
+          mobile: u.mobile,
+        })),
+      },
+    });
+
+  } catch (error) {
+    console.error("getDashboardStats Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 module.exports = {
   getAllAdvocates,
   getPendingAdvocates,
@@ -364,4 +416,5 @@ module.exports = {
   rejectAdvocate,
   getAllUsers,
   getUserDetails,
+  getDashboardStats
 };
