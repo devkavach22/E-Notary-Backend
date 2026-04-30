@@ -41,6 +41,23 @@ const partySchema = new mongoose.Schema(
       required: [true, "Party name is required"],
       trim: true,
     },
+    // ✅ NEW: Advocate ye decide karega - user is party mein main_case_holder ban sakta hai?
+    isMainCaseHolder: {
+      type: Boolean,
+      default: false,
+    },
+    // ✅ NEW: Advocate ye decide karega - user is party mein invited_person ban sakta hai?
+    isInvitedPerson: {
+      type: Boolean,
+      default: false,
+    },
+    // ✅ email - optional (invited ke liye use hoga baad mein)
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: null,
+    },
     fields: {
       type: [fieldSchema],
     },

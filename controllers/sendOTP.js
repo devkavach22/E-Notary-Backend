@@ -807,12 +807,12 @@ const sendMeetingConfirmationToUser = async ({
   </table>
 </body>
 </html>`;
- 
+
   await transporter.sendMail({
-    from:    `"E-Notary" <${process.env.EMAIL_USER}>`,
-    to:      userEmail,
+    from: `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to: userEmail,
     subject: `📅 Meeting Confirmed — ${meetingDate} at ${meetingTime} | E-Notary`,
-    html:    message,
+    html: message,
   });
 };
 
@@ -842,8 +842,8 @@ const sendTemplateSubmissionEmail = async ({
           <td style="padding:10px 16px;font-size:14px;color:#1a237e;
             border-bottom:1px solid #f0f0f0;">
             ${f.value !== null && f.value !== undefined && String(f.value).trim() !== ""
-              ? String(f.value)
-              : "<em style='color:#aaa;'>—</em>"}
+          ? String(f.value)
+          : "<em style='color:#aaa;'>—</em>"}
           </td>
         </tr>`
     )
@@ -1203,6 +1203,185 @@ const sendTemplateRejectedEmail = async ({
   });
 };
 
+// ═══════════════════════════════════════════════════════════
+// Template Invite Email — Sent to Invited Person
+// ═══════════════════════════════════════════════════════════
+const sendInviteEmail = async ({
+  toEmail,
+  toName,
+  inviterName,
+  templateTitle,
+  acceptLink,   // ✅ backend accept API
+  loginLink,    // ✅ frontend login page
+}) => {
+  const message = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>You're Invited</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+        style="background:#fff;border-radius:12px;overflow:hidden;
+        box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#e8193c,#c0122e);
+            padding:36px 40px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">
+              ⚖️ E-NOTARY
+            </h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;
+              letter-spacing:2px;text-transform:uppercase;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+
+        <!-- Icon -->
+        <tr>
+          <td align="center" style="padding:36px 40px 0;">
+            <span style="font-size:60px;">📩</span>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:24px 40px 20px;text-align:center;">
+            <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:22px;">
+              You have been invited!
+            </h2>
+            <p style="color:#555;font-size:15px;line-height:1.7;">
+              Dear <strong>${toName}</strong>,<br/>
+              <strong>${inviterName}</strong> has invited you to fill your details
+              for the legal document <strong>"${templateTitle}"</strong> on E-Notary.
+            </p>
+
+            <!-- Info Card -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#f0f4ff;border:1px solid #c5cae9;
+              border-left:4px solid #1a237e;border-radius:8px;
+              margin:20px 0;text-align:left;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <p style="margin:0 0 6px;color:#1a237e;font-size:13px;
+                    font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+                    📋 Document Details
+                  </p>
+                  <p style="margin:0 0 4px;color:#333;font-size:14px;">
+                    <strong>Document:</strong> ${templateTitle}
+                  </p>
+                  <p style="margin:0 0 4px;color:#333;font-size:14px;">
+                    <strong>Invited by:</strong> ${inviterName}
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Steps -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#f9f9f9;border:1px solid #e0e0e0;
+              border-radius:10px;margin:0 0 24px;text-align:left;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <p style="margin:0 0 10px;color:#333;font-size:14px;font-weight:700;">
+                    📌 Steps to follow:
+                  </p>
+                  <p style="margin:0 0 6px;color:#555;font-size:14px;">
+                    1️⃣ &nbsp;Click "Accept Invite" to confirm your participation
+                  </p>
+                  <p style="margin:0 0 6px;color:#555;font-size:14px;">
+                    2️⃣ &nbsp;Click "Login to App" to login to your E-Notary account
+                  </p>
+                  <p style="margin:0;color:#555;font-size:14px;">
+                    3️⃣ &nbsp;Fill in your required details for the document
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Accept Button -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 12px;">
+              <tr>
+                <td align="center">
+                  <a href="${acceptLink}"
+                    style="display:inline-block;
+                    background:linear-gradient(135deg,#e8193c,#c0122e);
+                    color:#fff;font-size:15px;font-weight:700;
+                    padding:14px 40px;border-radius:8px;text-decoration:none;">
+                    ✅ Accept Invite
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Login Button -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+              <tr>
+                <td align="center">
+                  <a href="${loginLink}"
+                    style="display:inline-block;
+                    background:linear-gradient(135deg,#1a237e,#283593);
+                    color:#fff;font-size:15px;font-weight:700;
+                    padding:14px 40px;border-radius:8px;text-decoration:none;">
+                    🔐 Login to App
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Warning -->
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#fff8f0;border-left:4px solid #f5a623;
+                  border-radius:6px;padding:14px 16px;text-align:left;">
+                  <p style="margin:0;color:#7a5200;font-size:13px;line-height:1.6;">
+                    ⚠️ This invite link is <strong>unique to you</strong>.
+                    Please do not share it with anyone.
+                    If you did not expect this invite, please ignore this email.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:24px 0 0;color:#999;font-size:12px;text-align:center;">
+              This is an automated notification from E-Notary. Please do not reply.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9f9f9;padding:24px 40px;
+            text-align:center;border-top:1px solid #f0f0f0;">
+            <p style="margin:0 0 6px;color:#bbb;font-size:12px;">
+              © ${new Date().getFullYear()} E-Notary by Kavach Global Connect Pvt. Ltd.
+            </p>
+            <p style="margin:0;color:#bbb;font-size:12px;">
+              India's Legal Execution Infrastructure
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from: `"E-Notary" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: `📩 You're Invited — ${templateTitle} | E-Notary`,
+    html: message,
+  });
+};
+
 module.exports = {
   generateOTP,
   sendOTPEmail,
@@ -1214,6 +1393,7 @@ module.exports = {
   sendBookingEmailToAdvocate,
   sendMeetingConfirmationToUser,
   sendTemplateSubmissionEmail,
-   sendTemplateAcceptedEmail,
+  sendTemplateAcceptedEmail,
   sendTemplateRejectedEmail,
+  sendInviteEmail
 };

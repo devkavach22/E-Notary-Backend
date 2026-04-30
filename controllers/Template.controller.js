@@ -7,23 +7,11 @@ const { sendTemplateAcceptedEmail, sendTemplateRejectedEmail } = require("./send
 
 // ── Helpers ─────────────────────────────────────────────────
 
-/**
- * Build a map of fieldName → uploaded file path from multer's req.files array.
- * Multer `upload.any()` puts files in req.files as an array.
- *
- * Convention:
- *   - For createTemplate / editTemplate : field name = "templateImage_<fieldName>"
- *   - For fillTemplate                  : field name = "filledImage_<fieldName>"
- *
- * @param {Array}  multerFiles  - req.files from upload.any()
- * @param {string} prefix       - "templateImage_" | "filledImage_"
- * @returns {Object}  { [normalizedFieldName]: filePath }
- */
+// ✅ SAME - bilkul nahi badla
 const buildImageMap = (multerFiles = [], prefix = "templateImage_") => {
   const map = {};
   for (const file of multerFiles) {
     if (file.fieldname.startsWith(prefix)) {
-      // Strip prefix, normalize to lowercase for case-insensitive matching
       const fieldName = file.fieldname.slice(prefix.length).toLowerCase();
       map[fieldName] = file.path;
     }
@@ -31,6 +19,7 @@ const buildImageMap = (multerFiles = [], prefix = "templateImage_") => {
   return map;
 };
 
+// ✅ SAME - bilkul nahi badla
 const formatFields = (fields, imageMap = {}) =>
   fields.map((f) => {
     const base = {
@@ -40,18 +29,16 @@ const formatFields = (fields, imageMap = {}) =>
       placeholder: f.placeholder?.trim() || "",
       options: f.fieldType === "dropdown" ? f.options : [],
     };
-
-    // ✅ If fieldType is "image" and a file was uploaded, store the path as defaultValue
     if (f.fieldType === "image") {
       const key = f.fieldName.trim().toLowerCase();
       if (imageMap[key]) {
         base.defaultImagePath = imageMap[key];
       }
     }
-
     return base;
   });
 
+// ✅ SAME - bilkul nahi badla
 const cleanFieldsForResponse = (fields) =>
   fields.map((f) => {
     const field = {
@@ -65,6 +52,7 @@ const cleanFieldsForResponse = (fields) =>
     return field;
   });
 
+// ✅ SAME - bilkul nahi badla
 const validateFields = (fields, partyLabel = "") => {
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i];
@@ -81,10 +69,27 @@ const validateFields = (fields, partyLabel = "") => {
   return null;
 };
 
+// ✅ UPDATED - isMainCaseHolder, isInvitedPerson validation add kiya
 const validateParties = (parties) => {
   for (let i = 0; i < parties.length; i++) {
     const party = parties[i];
-    if (!party.partyName?.trim()) return `Party ${i + 1}: partyName is required`;
+
+    // existing check
+    if (!party.partyName?.trim())
+      return `Party ${i + 1}: partyName is required`;
+
+    // ✅ NEW: dono false nahi ho sakte
+    if (!party.isMainCaseHolder && !party.isInvitedPerson)
+      return `Party "${party.partyName}": at least one of isMainCaseHolder or isInvitedPerson must be true`;
+
+    // ✅ NEW: email validate karo agar diya hai
+    if (party.email?.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(party.email.trim()))
+        return `Party "${party.partyName}": invalid email format`;
+    }
+
+    // existing check
     if (!Array.isArray(party.fields) || party.fields.length === 0)
       return `Party "${party.partyName}": at least one field is required`;
 
@@ -92,6 +97,15 @@ const validateParties = (parties) => {
     if (fieldError) return fieldError;
   }
 
+  // ✅ NEW: email unique check across parties
+  const emails = parties
+    .filter((p) => p.email?.trim())
+    .map((p) => p.email.trim().toLowerCase());
+
+  const hasDupeEmail = emails.some((e, i) => emails.indexOf(e) !== i);
+  if (hasDupeEmail) return "Duplicate emails are not allowed across parties";
+
+  // existing check
   const names = parties.map((p) => p.partyName.trim().toLowerCase());
   const hasDupe = names.some((n, i) => names.indexOf(n) !== i);
   if (hasDupe) return "Duplicate party names are not allowed";
@@ -99,15 +113,23 @@ const validateParties = (parties) => {
   return null;
 };
 
+// ✅ UPDATED - isMainCaseHolder, isInvitedPerson add kiya
 const formatParties = (parties, imageMap = {}) =>
   parties.map((p) => ({
     partyName: p.partyName.trim(),
+    isMainCaseHolder: p.isMainCaseHolder ?? false, // ✅ NEW
+    isInvitedPerson: p.isInvitedPerson ?? false,   // ✅ NEW
+    email: p.email?.trim().toLowerCase() || null,
     fields: formatFields(p.fields, imageMap),
   }));
 
+// ✅ UPDATED - isMainCaseHolder, isInvitedPerson response mein add kiya
 const cleanPartiesForResponse = (parties) =>
   parties.map((p) => ({
     partyName: p.partyName,
+    isMainCaseHolder: p.isMainCaseHolder, // ✅ NEW
+    isInvitedPerson: p.isInvitedPerson,   // ✅ NEW
+    email: p.email,
     fields: cleanFieldsForResponse(p.fields),
   }));
 
@@ -120,116 +142,78 @@ const createTemplate = async (req, res) => {
     console.log("req.files:", req.files);
 
     const { practiceArea, category, title, description, templateLayout } = req.body;
-    console.log("Destructured fields:", { practiceArea, category, title, description, templateLayout });
 
     let parties = [];
     let fields  = [];
     try {
-      console.log("req.body.parties type:", typeof req.body.parties);
-      console.log("req.body.parties value:", req.body.parties);
-      console.log("req.body.fields type:", typeof req.body.fields);
-      console.log("req.body.fields value:", req.body.fields);
-
       if (req.body.parties) {
         parties = typeof req.body.parties === "string"
           ? JSON.parse(req.body.parties.trim())
           : req.body.parties;
-        console.log("parsed parties:", JSON.stringify(parties, null, 2));
       }
-
       if (req.body.fields) {
         fields = typeof req.body.fields === "string"
           ? JSON.parse(req.body.fields.trim())
           : req.body.fields;
-        console.log("parsed fields:", JSON.stringify(fields, null, 2));
       }
     } catch (e) {
-      console.error("JSON parse failed:");
-      console.error("  error message:", e.message);
-      console.error("  raw parties:", req.body.parties);
-      console.error("  raw fields:", req.body.fields);
       return res.status(400).json({ success: false, message: "Invalid JSON in parties or fields" });
     }
 
     const advocateId = req.advocate._id;
-    console.log("advocateId:", advocateId);
 
     const advocate = await Advocate.findById(advocateId).select(
       "fullName approvalStatus isActive practiceAreas categories"
     );
-    console.log("advocate found:", advocate ? JSON.stringify(advocate, null, 2) : "NOT FOUND");
 
-    if (!advocate) {
-      console.warn("Advocate not found for id:", advocateId);
+    if (!advocate)
       return res.status(404).json({ success: false, message: "Advocate not found" });
-    }
 
-    if (advocate.approvalStatus !== "approved" || !advocate.isActive) {
-      console.warn("Unauthorized advocate:", { approvalStatus: advocate.approvalStatus, isActive: advocate.isActive });
+    if (advocate.approvalStatus !== "approved" || !advocate.isActive)
       return res.status(403).json({ success: false, message: "Unauthorized advocate" });
-    }
 
-    if (!practiceArea?.trim()) {
-      console.warn("Missing practiceArea");
+    if (!practiceArea?.trim())
       return res.status(400).json({ success: false, message: "Practice area is required" });
-    }
-    if (!category?.trim()) {
-      console.warn("Missing category");
-      return res.status(400).json({ success: false, message: "Category is required" });
-    }
-    if (!title?.trim()) {
-      console.warn("Missing title");
-      return res.status(400).json({ success: false, message: "Template title is required" });
-    }
 
-    console.log("advocate.practiceAreas:", advocate.practiceAreas);
-    if (!advocate.practiceAreas.includes(practiceArea.trim())) {
-      console.warn(`Practice area "${practiceArea}" not in advocate's areas:`, advocate.practiceAreas);
+    if (!category?.trim())
+      return res.status(400).json({ success: false, message: "Category is required" });
+
+    if (!title?.trim())
+      return res.status(400).json({ success: false, message: "Template title is required" });
+
+    if (!advocate.practiceAreas.includes(practiceArea.trim()))
       return res.status(403).json({
         success: false,
         message: `You are not registered for practice area: "${practiceArea}". Your areas: ${advocate.practiceAreas.join(", ")}`,
       });
-    }
 
-    console.log("advocate.categories:", advocate.categories);
-    if (!advocate.categories.includes(category.trim())) {
-      console.warn(`Category "${category}" not in advocate's categories:`, advocate.categories);
+    if (!advocate.categories.includes(category.trim()))
       return res.status(403).json({
         success: false,
         message: `You are not registered for category: "${category}". Your categories: ${advocate.categories.join(", ")}`,
       });
-    }
 
     const existing = await Template.findOne({ advocateId, title: title.trim(), isActive: true });
-    console.log("existing template check:", existing ? `Found - id: ${existing._id}` : "None found");
-    if (existing) {
-      console.warn("Duplicate template title:", title.trim());
+    if (existing)
       return res.status(409).json({ success: false, message: "Template with this title already exists" });
-    }
 
     const imageMap = buildImageMap(req.files || [], "templateImage_");
-    console.log("imageMap:", imageMap);
 
     const hasParties = Array.isArray(parties) && parties.length > 0;
     const hasFields  = Array.isArray(fields)  && fields.length  > 0;
-    console.log("hasParties:", hasParties, "| hasFields:", hasFields);
 
     if (hasParties) {
       const partyError = validateParties(parties);
-      console.log("partyError:", partyError || "none");
       if (partyError) return res.status(400).json({ success: false, message: partyError });
     }
 
     if (hasFields) {
       const fieldError = validateFields(fields);
-      console.log("fieldError:", fieldError || "none");
       if (fieldError) return res.status(400).json({ success: false, message: fieldError });
     }
 
     const formattedParties = hasParties ? formatParties(parties, imageMap) : [];
     const formattedFields  = hasFields  ? formatFields(fields, imageMap)   : [];
-    console.log("formattedParties:", JSON.stringify(formattedParties, null, 2));
-    console.log("formattedFields:", JSON.stringify(formattedFields, null, 2));
 
     const template = await Template.create({
       advocateId,
@@ -242,14 +226,13 @@ const createTemplate = async (req, res) => {
       parties: formattedParties,
       fields:  formattedFields,
     });
-    console.log("Template created successfully, id:", template._id);
 
     const responseData = {
       ...template.toObject(),
       parties: cleanPartiesForResponse(template.parties),
       fields:  cleanFieldsForResponse(template.fields),
     };
-    console.log("Response data:", JSON.stringify(responseData, null, 2));
+
     console.log("=== createTemplate END ===");
 
     return res.status(201).json({
@@ -260,7 +243,6 @@ const createTemplate = async (req, res) => {
 
   } catch (error) {
     console.error("=== createTemplate UNHANDLED ERROR ===");
-    console.error("Error name:", error.name);
     console.error("Error message:", error.message);
     console.error("Error stack:", error.stack);
     return res.status(500).json({ success: false, message: "Internal server error" });
@@ -275,8 +257,8 @@ const getTemplates = async (req, res) => {
 
     const filter = { advocateId };
     if (practiceArea?.trim()) filter.practiceArea = practiceArea.trim();
-    if (category?.trim())     filter.category     = category.trim();
-    if (isActive !== undefined) filter.isActive   = isActive === "true";
+    if (category?.trim()) filter.category = category.trim();
+    if (isActive !== undefined) filter.isActive = isActive === "true";
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -288,7 +270,7 @@ const getTemplates = async (req, res) => {
     const data = templates.map((t) => ({
       ...t.toObject(),
       parties: cleanPartiesForResponse(t.parties),
-      fields:  cleanFieldsForResponse(t.fields),
+      fields: cleanFieldsForResponse(t.fields),
     }));
 
     return res.status(200).json({
@@ -312,7 +294,7 @@ const getTemplates = async (req, res) => {
 const editTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
-    const advocateId     = req.advocate._id;
+    const advocateId = req.advocate._id;
 
     console.log("═══════════════════════════════════════════");
     console.log("📥 editTemplate HIT");
@@ -398,7 +380,7 @@ const editTemplate = async (req, res) => {
     }
 
     if (description !== undefined) template.description = description?.trim() || "";
-    if (isActive    !== undefined) template.isActive    = Boolean(isActive);
+    if (isActive !== undefined) template.isActive = Boolean(isActive);
 
     // ── Parties update ──────────────────────────────────
     if (parties !== undefined) {
@@ -441,7 +423,7 @@ const editTemplate = async (req, res) => {
         const fieldError = validateFields(fields);
         if (fieldError) return res.status(400).json({ success: false, message: fieldError });
 
-        const formatted          = formatFields(fields, imageMap);
+        const formatted = formatFields(fields, imageMap);
         const existingFieldNames = new Set(template.fields.map((f) => f.fieldName.toLowerCase()));
 
         // ✅ Update image paths for existing image fields
@@ -476,7 +458,7 @@ const editTemplate = async (req, res) => {
       data: {
         ...template.toObject(),
         parties: cleanPartiesForResponse(template.parties),
-        fields:  cleanFieldsForResponse(template.fields),
+        fields: cleanFieldsForResponse(template.fields),
       },
     });
 
@@ -490,7 +472,7 @@ const editTemplate = async (req, res) => {
 const getTemplateById = async (req, res) => {
   try {
     const { templateId } = req.params;
-    const advocateId     = req.advocate._id;
+    const advocateId = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
@@ -504,7 +486,7 @@ const getTemplateById = async (req, res) => {
       data: {
         ...template.toObject(),
         parties: cleanPartiesForResponse(template.parties),
-        fields:  cleanFieldsForResponse(template.fields),
+        fields: cleanFieldsForResponse(template.fields),
       },
     });
   } catch (error) {
@@ -517,7 +499,7 @@ const getTemplateById = async (req, res) => {
 const deleteTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
-    const advocateId     = req.advocate._id;
+    const advocateId = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(templateId))
       return res.status(400).json({ success: false, message: "Invalid template ID" });
@@ -560,7 +542,7 @@ const getFilledTemplates = async (req, res) => {
 
     const [submissions, total] = await Promise.all([
       UserFilledTemplate.find(filter)
-        .populate("userId",     "fullName email mobile")
+        .populate("userId", "fullName email mobile")
         .populate("templateId", "title practiceArea category")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -590,13 +572,13 @@ const getFilledTemplates = async (req, res) => {
 const acceptSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const advocateId       = req.advocate._id;
+    const advocateId = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(submissionId))
       return res.status(400).json({ success: false, message: "Invalid submission ID" });
 
     const submission = await UserFilledTemplate.findOne({ _id: submissionId, advocateId })
-      .populate("userId",     "fullName email")
+      .populate("userId", "fullName email")
       .populate("templateId", "title");
 
     if (!submission)
@@ -608,20 +590,20 @@ const acceptSubmission = async (req, res) => {
         message: `Submission is already ${submission.status}`,
       });
 
-    submission.status          = "accepted";
+    submission.status = "accepted";
     submission.rejectionReason = null;
     await submission.save();
 
     try {
       if (submission.userId?.email) {
         await sendTemplateAcceptedEmail({
-          userEmail:     submission.userId.email,
-          userName:      submission.userId.fullName,
-          advocateName:  req.advocate.fullName,
+          userEmail: submission.userId.email,
+          userName: submission.userId.fullName,
+          advocateName: req.advocate.fullName,
           templateTitle: submission.title,
-          practiceArea:  submission.practiceArea,
-          category:      submission.category,
-          submissionId:  submission._id.toString(),
+          practiceArea: submission.practiceArea,
+          category: submission.category,
+          submissionId: submission._id.toString(),
         });
         console.log("✅ Acceptance email sent to user:", submission.userId.email);
       }
@@ -644,8 +626,8 @@ const acceptSubmission = async (req, res) => {
 const rejectSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const { reason }       = req.body;
-    const advocateId       = req.advocate._id;
+    const { reason } = req.body;
+    const advocateId = req.advocate._id;
 
     if (!mongoose.Types.ObjectId.isValid(submissionId))
       return res.status(400).json({ success: false, message: "Invalid submission ID" });
@@ -657,7 +639,7 @@ const rejectSubmission = async (req, res) => {
       return res.status(400).json({ success: false, message: "Reason must not exceed 500 characters" });
 
     const submission = await UserFilledTemplate.findOne({ _id: submissionId, advocateId })
-      .populate("userId",     "fullName email")
+      .populate("userId", "fullName email")
       .populate("templateId", "title");
 
     if (!submission)
@@ -669,21 +651,21 @@ const rejectSubmission = async (req, res) => {
         message: `Submission is already ${submission.status}`,
       });
 
-    submission.status          = "rejected";
+    submission.status = "rejected";
     submission.rejectionReason = reason.trim();
     await submission.save();
 
     try {
       if (submission.userId?.email) {
         await sendTemplateRejectedEmail({
-          userEmail:     submission.userId.email,
-          userName:      submission.userId.fullName,
-          advocateName:  req.advocate.fullName,
+          userEmail: submission.userId.email,
+          userName: submission.userId.fullName,
+          advocateName: req.advocate.fullName,
           templateTitle: submission.title,
-          practiceArea:  submission.practiceArea,
-          category:      submission.category,
-          submissionId:  submission._id.toString(),
-          reason:        reason.trim(),
+          practiceArea: submission.practiceArea,
+          category: submission.category,
+          submissionId: submission._id.toString(),
+          reason: reason.trim(),
         });
         console.log("✅ Rejection email sent to user:", submission.userId.email);
       }
@@ -695,8 +677,8 @@ const rejectSubmission = async (req, res) => {
       success: true,
       message: "Submission rejected successfully",
       data: {
-        submissionId:    submission._id,
-        status:          submission.status,
+        submissionId: submission._id,
+        status: submission.status,
         rejectionReason: submission.rejectionReason,
       },
     });
@@ -743,42 +725,42 @@ const getAdvocateDashboard = async (req, res) => {
       success: true,
       data: {
         advocate: {
-          name:     advocate.fullName,
+          name: advocate.fullName,
           joinDate: formatDate(advocate.createdAt),
         },
         stats: {
-          totalTemplates:  totalTemplates,
-          totalUsers:      totalUsers.length,
-          totalPending:    pendingSubmissions.length,
-          totalAccepted:   acceptedSubmissions.length,
-          totalRejected:   rejectedSubmissions.length,
+          totalTemplates: totalTemplates,
+          totalUsers: totalUsers.length,
+          totalPending: pendingSubmissions.length,
+          totalAccepted: acceptedSubmissions.length,
+          totalRejected: rejectedSubmissions.length,
         },
         pending: pendingSubmissions.map((s) => ({
           submissionId: s._id,
-          title:        s.title,
+          title: s.title,
           practiceArea: s.practiceArea,
-          category:     s.category,
-          userName:     s.userId?.fullName || "N/A",
-          submitDate:   formatDate(s.createdAt),
+          category: s.category,
+          userName: s.userId?.fullName || "N/A",
+          submitDate: formatDate(s.createdAt),
         })),
         accepted: acceptedSubmissions.map((s) => ({
           submissionId: s._id,
-          title:        s.title,
+          title: s.title,
           practiceArea: s.practiceArea,
-          category:     s.category,
-          userName:     s.userId?.fullName || "N/A",
-          submitDate:   formatDate(s.createdAt),
-          acceptDate:   formatDate(s.updatedAt),
+          category: s.category,
+          userName: s.userId?.fullName || "N/A",
+          submitDate: formatDate(s.createdAt),
+          acceptDate: formatDate(s.updatedAt),
         })),
         rejected: rejectedSubmissions.map((s) => ({
-          submissionId:    s._id,
-          title:           s.title,
-          practiceArea:    s.practiceArea,
-          category:        s.category,
-          userName:        s.userId?.fullName || "N/A",
+          submissionId: s._id,
+          title: s.title,
+          practiceArea: s.practiceArea,
+          category: s.category,
+          userName: s.userId?.fullName || "N/A",
           rejectionReason: s.rejectionReason,
-          submitDate:      formatDate(s.createdAt),
-          rejectedDate:    formatDate(s.updatedAt),
+          submitDate: formatDate(s.createdAt),
+          rejectedDate: formatDate(s.updatedAt),
         })),
       },
     });

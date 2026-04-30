@@ -39,6 +39,11 @@ const { adminAuth, userAuth, advocateAuth } = require("../middlewares/Auth.middl
 const { getUserCases } = require("../controllers/Booking.controller")
 
 
+const { startTemplate,
+  inviteParties,
+  acceptInvite,
+  fillParty,} =require("../controllers/userTemplateController");
+
 router.post("/send-otp", sendOTP);
 router.post("/verify-otp", verifyOTP);
 router.post("/send-mobile-otp", sendMobileOTP);
@@ -75,6 +80,14 @@ router.get("/user/mybooking", userAuth, getUserCases);
 router.get("/user/profile", userAuth, getUSerProfile);
 router.put("/user/profile/edit", userAuth, editUserProfile,
 );
+
+// user template filling Here 
+router.post("/templates/:templateId/start", filledTemplateImageUpload, handleUploadError, userAuth, startTemplate);
+router.post("/templates/:templateId/invite", userAuth, inviteParties);
+router.get("/templates/:templateId/accept/:token", acceptInvite);
+router.post("/templates/:templateId/fill/:partyId", filledTemplateImageUpload, handleUploadError, userAuth, fillParty);
+
+
 
 router.post("/company/register", companyUpload, handleUploadError, registerCompany);
 
