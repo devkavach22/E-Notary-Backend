@@ -91,6 +91,7 @@ const registerUser = async (req, res) => {
       address, city, state, pincode,
       gender,
       aadhaarFrontPath, panCardPath,
+      inviteToken,  // ✅ NEW - optional
     } = req.body;
 
     if (!email || !mobile || !password || !fullName || !dateOfBirth ||
@@ -146,6 +147,30 @@ const registerUser = async (req, res) => {
     if (!parsedDOB)
       return res.status(400).json({ success: false, message: "Invalid date of birth format" });
 
+    let validatedInviteToken = null;
+    if (inviteToken?.trim()) {
+      const inviteRecord = await UserFilledTemplate.findOne({
+        "parties.inviteToken": inviteToken.trim(),
+      });
+
+      if (!inviteRecord) {
+        return res.status(400).json({ success: false, message: "Invalid invite token" });
+      }
+
+      const invitedParty = inviteRecord.parties.find(
+        (p) => p.inviteToken === inviteToken.trim()
+      );
+
+      if (invitedParty.email !== email.toLowerCase().trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "This invite token does not belong to this email address",
+        });
+      }
+
+      validatedInviteToken = inviteToken.trim();
+    }
+
     const user = await User.create({
       email, mobile, password, fullName,
       dateOfBirth: parsedDOB,
@@ -163,6 +188,7 @@ const registerUser = async (req, res) => {
         aadhaarVerified: true,
         panVerified: true,
       },
+      inviteToken: validatedInviteToken,  
     });
 
     return res.status(201).json({
@@ -173,6 +199,7 @@ const registerUser = async (req, res) => {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
+        hasInvite: !!validatedInviteToken,
       },
     });
 
@@ -201,7 +228,6 @@ const registerUser = async (req, res) => {
 };
 
 
-// ── REGISTER COMPANY ─────────────────────────────────────────
 const registerCompany = async (req, res) => {
   try {
     console.log("\n========== REGISTER COMPANY ==========");
@@ -517,7 +543,6 @@ const getTemplatesForUser = async (req, res) => {
   }
 };
 
-// ── FILL TEMPLATE ────────────────────────────────────────────
 const fillTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
@@ -879,7 +904,6 @@ const downloadFilledTemplate = async (req, res) => {
   }
 };
 
-// ── EDIT USER PROFILE ────────────────────────────────────────
 const editUserProfile = async (req, res) => {
   try {
     const userId = req.user._id;

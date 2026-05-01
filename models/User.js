@@ -3,7 +3,6 @@ const bcrypt   = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
     {
-        // ─── Contact Details ─────────────────────────────────
         email: {
             type:      String,
             required:  [true, "Email is required"],
@@ -28,7 +27,6 @@ const userSchema = new mongoose.Schema(
             select:    false,
         },
 
-        // ─── Personal Details (OCR se auto fill) ─────────────
         fullName:    { type: String, required: [function () { return this.role === "user"; }, "Full name is required"], trim: true },
         dateOfBirth: { type: Date,   required: [function () { return this.role === "user"; }, "Date of birth is required"] },
         gender: {
@@ -38,7 +36,6 @@ const userSchema = new mongoose.Schema(
             default:  null,
         },
 
-        // ─── Identity ─────────────────────────────────────────
         aadhaarNumber: {
             type:     String,
             required: [function () { return this.role === "user"; }, "Aadhaar number is required"],
@@ -55,26 +52,22 @@ const userSchema = new mongoose.Schema(
             match:     [/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Invalid PAN number"],
         },
 
-        // ─── Documents ────────────────────────────────────────
         documents: {
             aadhaarFront: { type: String, required: [function () { return this.role === "user"; }, "Aadhaar front is required"] },
             panCard:      { type: String, required: [function () { return this.role === "user"; }, "PAN card is required"] },
         },
 
-        // ─── Address ──────────────────────────────────────────
         address: { type: String, required: [function () { return this.role === "user"; }, "Address is required"],  trim: true },
         city:    { type: String, required: [function () { return this.role === "user"; }, "City is required"],     trim: true },
         state:   { type: String, required: [function () { return this.role === "user"; }, "State is required"],    trim: true },
         pincode: { type: String, required: [function () { return this.role === "user"; }, "Pincode is required"],  match: [/^\d{6}$/, "Invalid pincode"] },
 
-        // ─── Role ─────────────────────────────────────────────
         role: { type: String, default: "user", enum: ["user", "company"] },
 
         // ─── Verification ─────────────────────────────────────
         isEmailVerified:  { type: Boolean, default: false },
         isMobileVerified: { type: Boolean, default: false },
 
-        // ─── Document Verification Checks ─────────────────────
         verificationChecks: {
             aadhaarVerified: { type: Boolean, default: false },
             panVerified:     { type: Boolean, default: false },
@@ -82,11 +75,14 @@ const userSchema = new mongoose.Schema(
 
         isActive: { type: Boolean, default: true },
 
-        // ══════════════════════════════════════════════════════
-        // ─── COMPANY FIELDS (only used when role = "company") ─
-        // ══════════════════════════════════════════════════════
+        inviteToken: {
+            type:    String,
+            default: null,
+            trim:    true,
+        },
 
-        // ─── Company Basic Info ───────────────────────────────
+        
+
         companyName: {
             type:     String,
             trim:     true,
@@ -106,7 +102,6 @@ const userSchema = new mongoose.Schema(
             required:  [function () { return this.role === "company"; }, "Registration number is required"],
         },
         gstNumber: {
-            // Optional — but strictly validated when provided
             type:      String,
             trim:      true,
             uppercase: true,
@@ -117,7 +112,6 @@ const userSchema = new mongoose.Schema(
             ],
         },
 
-        // ─── Authorized Person ────────────────────────────────
         authorizedPerson: {
             fullName: {
                 type:     String,
@@ -142,27 +136,23 @@ const userSchema = new mongoose.Schema(
             },
         },
 
-        // ─── Company Documents ────────────────────────────────
         companyDocuments: {
             registrationCertificate: {
                 type:     String,
                 required: [function () { return this.role === "company"; }, "Registration certificate is required"],
             },
             authorizationLetter: {
-                // Board Resolution or Authorization Letter
                 type:     String,
                 required: [function () { return this.role === "company"; }, "Authorization letter is required"],
             },
         },
 
-        // ─── Company Address ──────────────────────────────────
         registeredOfficeAddress: {
             type:     String,
             trim:     true,
             required: [function () { return this.role === "company"; }, "Registered office address is required"],
         },
         businessAddress: {
-            // Optional — only if different from registered office
             type: String,
             trim: true,
         },
@@ -185,14 +175,12 @@ const userSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// ─── Password Hash ────────────────────────────────────────
 userSchema.pre("save", async function () {
     if (!this.isModified("password")) return;
     const salt    = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
 });
 
-// ─── Password Compare ─────────────────────────────────────
 userSchema.methods.comparePassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };

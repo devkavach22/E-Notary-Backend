@@ -20,7 +20,6 @@ const filledFieldSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ✅ NEW: har party ka schema
 const partyFilledSchema = new mongoose.Schema(
   {
     partyName: {
@@ -28,37 +27,35 @@ const partyFilledSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    // ✅ User ne select kiya - main_case_holder ya invited_person
     role: {
       type: String,
       enum: ["main_case_holder", "invited_person"],
       required: true,
     },
-    // ✅ Invited person ki email (main_case_holder ne di)
     email: {
       type: String,
       trim: true,
       lowercase: true,
       default: null,
     },
-    // ✅ Kaun sa user is party ko fill kar raha hai
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
-    // ✅ Invite token - email mein jayega
     inviteToken: {
       type: String,
       default: null,
     },
-    // ✅ Party level status
+    isUserRegistered: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ["pending", "invited", "accepted", "filled"],
       default: "pending",
     },
-    // ✅ Us party ke filled fields
     filledFields: {
       type: [filledFieldSchema],
       default: [],
@@ -79,7 +76,6 @@ const userFilledTemplateSchema = new mongoose.Schema(
       ref: "Advocate",
       required: true,
     },
-    // ✅ Main case holder ka userId (jo pehle fill karta hai)
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -94,18 +90,15 @@ const userFilledTemplateSchema = new mongoose.Schema(
     category: {
       type: String,
     },
-    // ✅ NEW: parties array - har party ka status track hoga
     parties: {
       type: [partyFilledSchema],
       default: [],
     },
-    // ✅ NEW: template level status
     templateStatus: {
       type: String,
       enum: ["in_progress", "completed"],
       default: "in_progress",
     },
-    // existing - advocate ke liye
     status: {
       type: String,
       enum: ["submitted", "accepted", "rejected"],

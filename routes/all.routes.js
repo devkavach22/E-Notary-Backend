@@ -42,7 +42,8 @@ const { getUserCases } = require("../controllers/Booking.controller")
 const { startTemplate,
   inviteParties,
   acceptInvite,
-  fillParty,} =require("../controllers/userTemplateController");
+  fillParty,
+  getPartyFields, getTemplateParties } = require("../controllers/userTemplateController");
 
 router.post("/send-otp", sendOTP);
 router.post("/verify-otp", verifyOTP);
@@ -86,8 +87,8 @@ router.post("/templates/:templateId/start", filledTemplateImageUpload, handleUpl
 router.post("/templates/:templateId/invite", userAuth, inviteParties);
 router.get("/templates/:templateId/accept/:token", acceptInvite);
 router.post("/templates/:templateId/fill/:partyId", filledTemplateImageUpload, handleUploadError, userAuth, fillParty);
-
-
+router.get("/user/templates/:templateId/party-fields", userAuth, getPartyFields);
+router.get("/templates/:templateId/parties", userAuth, getTemplateParties);
 
 router.post("/company/register", companyUpload, handleUploadError, registerCompany);
 

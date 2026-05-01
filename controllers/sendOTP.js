@@ -1,11 +1,9 @@
 const nodemailer = require("nodemailer");
 
-// ─── Random 6 digit OTP ───────────────────────────────────
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// ─── Email Transporter ───────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: process.env.EMAIL_PORT,
@@ -16,9 +14,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ═══════════════════════════════════════════════════════════
-// OTP Email Template
-// ═══════════════════════════════════════════════════════════
 const sendOTPEmail = async (email, otp, purpose) => {
   const subject =
     purpose === "email_verify"
@@ -98,11 +93,7 @@ const sendOTPEmail = async (email, otp, purpose) => {
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Admin Notification — New Advocate Registered
-// Sent to ADMIN_EMAIL when a new advocate completes registration
-// advocate: full Mongoose document
-// ═══════════════════════════════════════════════════════════
+
 const sendAdminNewAdvocateNotification = async (advocate) => {
   const adminEmail = process.env.ADMIN_EMAIL // same email used for sending — your admin inbox
 
@@ -237,9 +228,7 @@ const sendAdminNewAdvocateNotification = async (advocate) => {
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Approval Email
-// ═══════════════════════════════════════════════════════════
+
 const sendApprovalEmail = async (email, fullName) => {
   const message = `
 <!DOCTYPE html>
@@ -309,9 +298,7 @@ const sendApprovalEmail = async (email, fullName) => {
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Rejection Email
-// ═══════════════════════════════════════════════════════════
+
 const sendRejectionEmail = async (email, fullName, reason) => {
   const message = `
 <!DOCTYPE html>
@@ -390,9 +377,7 @@ const sendRejectionEmail = async (email, fullName, reason) => {
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Forget Password OTP Email
-// ═══════════════════════════════════════════════════════════
+
 const sendForgetPasswordOTP = async (email, otp) => {
   const message = `
 <!DOCTYPE html>
@@ -816,9 +801,7 @@ const sendMeetingConfirmationToUser = async ({
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Template Submission Notification — Sent to Advocate
-// ═══════════════════════════════════════════════════════════
+
 const sendTemplateSubmissionEmail = async ({
   advocateEmail,
   advocateName,
@@ -1008,9 +991,7 @@ const sendTemplateSubmissionEmail = async ({
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Template Accepted Email — Sent to User
-// ═══════════════════════════════════════════════════════════
+
 const sendTemplateAcceptedEmail = async ({
   userEmail, userName, advocateName, templateTitle, practiceArea, category, submissionId,
 }) => {
@@ -1101,9 +1082,7 @@ const sendTemplateAcceptedEmail = async ({
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Template Rejected Email — Sent to User
-// ═══════════════════════════════════════════════════════════
+
 const sendTemplateRejectedEmail = async ({
   userEmail, userName, advocateName, templateTitle, practiceArea, category, submissionId, reason,
 }) => {
@@ -1203,16 +1182,16 @@ const sendTemplateRejectedEmail = async ({
   });
 };
 
-// ═══════════════════════════════════════════════════════════
-// Template Invite Email — Sent to Invited Person
-// ═══════════════════════════════════════════════════════════
+
 const sendInviteEmail = async ({
   toEmail,
   toName,
   inviterName,
   templateTitle,
-  acceptLink,   // ✅ backend accept API
-  loginLink,    // ✅ frontend login page
+  acceptLink,
+  loginLink,
+  inviteToken,
+  isRegistered,  // ✅ NEW
 }) => {
   const message = `
 <!DOCTYPE html>
@@ -1279,6 +1258,14 @@ const sendInviteEmail = async ({
                   <p style="margin:0 0 4px;color:#333;font-size:14px;">
                     <strong>Invited by:</strong> ${inviterName}
                   </p>
+                  <p style="margin:8px 0 0;color:#333;font-size:13px;">
+                    <strong>Your Invite Token:</strong>
+                  </p>
+                  <p style="margin:4px 0 0;color:#e8193c;font-size:12px;
+                    font-family:monospace;word-break:break-all;
+                    background:#fff0f3;padding:8px;border-radius:6px;">
+                    ${inviteToken}
+                  </p>
                 </td>
               </tr>
             </table>
@@ -1296,7 +1283,9 @@ const sendInviteEmail = async ({
                     1️⃣ &nbsp;Click "Accept Invite" to confirm your participation
                   </p>
                   <p style="margin:0 0 6px;color:#555;font-size:14px;">
-                    2️⃣ &nbsp;Click "Login to App" to login to your E-Notary account
+                    2️⃣ &nbsp;${isRegistered
+      ? 'Click "Login to App" to login to your E-Notary account'
+      : 'Click "Register to App" to create your E-Notary account'}
                   </p>
                   <p style="margin:0;color:#555;font-size:14px;">
                     3️⃣ &nbsp;Fill in your required details for the document
@@ -1320,7 +1309,7 @@ const sendInviteEmail = async ({
               </tr>
             </table>
 
-            <!-- Login Button -->
+            <!-- ✅ NEW: Login ya Register button -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
               <tr>
                 <td align="center">
@@ -1329,7 +1318,7 @@ const sendInviteEmail = async ({
                     background:linear-gradient(135deg,#1a237e,#283593);
                     color:#fff;font-size:15px;font-weight:700;
                     padding:14px 40px;border-radius:8px;text-decoration:none;">
-                    🔐 Login to App
+                    ${isRegistered ? '🔐 Login to App' : '📝 Register to App'}
                   </a>
                 </td>
               </tr>
@@ -1341,7 +1330,7 @@ const sendInviteEmail = async ({
                 <td style="background:#fff8f0;border-left:4px solid #f5a623;
                   border-radius:6px;padding:14px 16px;text-align:left;">
                   <p style="margin:0;color:#7a5200;font-size:13px;line-height:1.6;">
-                    ⚠️ This invite link is <strong>unique to you</strong>.
+                    ⚠️ This invite link and token is <strong>unique to you</strong>.
                     Please do not share it with anyone.
                     If you did not expect this invite, please ignore this email.
                   </p>

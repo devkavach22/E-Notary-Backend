@@ -67,9 +67,130 @@ const validateRequiredFields = (templatePartyFields, filledFields, uploadedImage
     return missing;
 };
 
-// ─────────────────────────────────────────────────────────────
-// STEP 1: startTemplate
-// ─────────────────────────────────────────────────────────────
+const cleanFieldsForResponse = (fields) =>
+    fields.map((f) => {
+        const field = {
+            fieldName: f.fieldName,
+            fieldType: f.fieldType,
+            required: f.required,
+            placeholder: f.placeholder,
+        };
+        if (f.fieldType === "dropdown") field.options = f.options;
+        if (f.fieldType === "image" && f.defaultImagePath) field.defaultImagePath = f.defaultImagePath;
+        return field;
+    });
+
+const getPartyFields = async (req, res) => {
+    try {
+        const { templateId } = req.params;
+        const { partyName, role, token } = req.query;
+
+        if (!mongoose.Types.ObjectId.isValid(templateId))
+            return res.status(400).json({ success: false, message: "Invalid template ID" });
+
+        // ✅ role validate
+        if (!role?.trim() || !["main_case_holder", "invited_person"].includes(role))
+            return res.status(400).json({ success: false, message: "role is required: main_case_holder or invited_person" });
+
+        const template = await Template.findOne({ _id: templateId, isActive: true }).select("-__v");
+        if (!template)
+            return res.status(404).json({ success: false, message: "Template not found or inactive" });
+
+        // ✅ CASE 1: Invited person - token se dhundho
+        if (role === "invited_person") {
+            if (!token?.trim())
+                return res.status(400).json({ success: false, message: "token is required for invited_person" });
+
+            const userFilledTemplate = await UserFilledTemplate.findOne({
+                templateId: template._id,
+                "parties.inviteToken": token,
+            });
+
+            if (!userFilledTemplate)
+                return res.status(404).json({ success: false, message: "Invalid or expired invite token" });
+
+            const invitedParty = userFilledTemplate.parties.find((p) => p.inviteToken === token);
+            if (!invitedParty)
+                return res.status(404).json({ success: false, message: "Party not found" });
+
+            if (invitedParty.status === "filled")
+                return res.status(400).json({ success: false, message: "You have already filled the form" });
+
+            const templateParty = template.parties.find(
+                (p) => p.partyName.trim().toLowerCase() === invitedParty.partyName.trim().toLowerCase()
+            );
+
+            if (!templateParty)
+                return res.status(404).json({ success: false, message: "Template party not found" });
+
+            return res.status(200).json({
+                success: true,
+                message: `Fields for ${invitedParty.partyName} as invited_person`,
+                data: {
+                    templateId: template._id,
+                    userFilledTemplateId: userFilledTemplate._id,  // ✅ fillParty ke liye
+                    partyId: invitedParty._id,                     // ✅ fillParty ke liye
+                    title: template.title,
+                    practiceArea: template.practiceArea,
+                    category: template.category,
+                    partyName: invitedParty.partyName,
+                    role: "invited_person",
+                    status: invitedParty.status,
+                    partyFields: templateParty.fields.map((f) => ({
+                        fieldName: f.fieldName,
+                        fieldType: f.fieldType,
+                        required: f.required,
+                        placeholder: f.placeholder,
+                        ...(f.fieldType === "dropdown" && { options: f.options }),
+                        ...(f.fieldType === "image" && f.defaultImagePath && { defaultImagePath: f.defaultImagePath }),
+                    })),
+                    generalFields: cleanFieldsForResponse(template.fields),
+                },
+            });
+        }
+
+        // ✅ CASE 2: Main case holder - partyName se dhundho
+        if (!partyName?.trim())
+            return res.status(400).json({ success: false, message: "partyName is required for main_case_holder" });
+
+        const party = template.parties.find(
+            (p) => p.partyName.trim().toLowerCase() === partyName.trim().toLowerCase()
+        );
+        if (!party)
+            return res.status(404).json({ success: false, message: `Party "${partyName}" not found in template` });
+
+        if (!party.isMainCaseHolder)
+            return res.status(400).json({ success: false, message: `Party "${partyName}" cannot be main case holder` });
+
+        return res.status(200).json({
+            success: true,
+            message: `Fields for ${partyName} as main_case_holder`,
+            data: {
+                templateId: template._id,
+                title: template.title,
+                practiceArea: template.practiceArea,
+                category: template.category,
+                partyName: party.partyName,
+                role: "main_case_holder",
+                partyFields: party.fields.map((f) => ({
+                    fieldName: f.fieldName,
+                    fieldType: f.fieldType,
+                    required: f.required,
+                    placeholder: f.placeholder,
+                    ...(f.fieldType === "dropdown" && { options: f.options }),
+                    ...(f.fieldType === "image" && f.defaultImagePath && { defaultImagePath: f.defaultImagePath }),
+                })),
+                generalFields: cleanFieldsForResponse(template.fields),
+            },
+        });
+
+    } catch (error) {
+        console.error("getPartyFields Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+
 const startTemplate = async (req, res) => {
     try {
         const { templateId } = req.params;
@@ -82,8 +203,12 @@ const startTemplate = async (req, res) => {
 
         let filledFields = [];
         let partyName = "";
+        let role = "";
+        let email = "";
         try {
             partyName = req.body.partyName || "";
+            role = req.body.role || "";
+            email = req.body.email || "";
             if (req.body.filledFields) {
                 filledFields = typeof req.body.filledFields === "string"
                     ? JSON.parse(req.body.filledFields.trim())
@@ -93,22 +218,40 @@ const startTemplate = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid JSON in filledFields" });
         }
 
+        // ✅ partyName validate
         if (!partyName?.trim())
-            return res.status(400).json({ success: false, message: "partyName is required - select your party" });
+            return res.status(400).json({ success: false, message: "partyName is required" });
+
+        // ✅ role validate
+        if (!role?.trim() || !["main_case_holder", "invited_person"].includes(role))
+            return res.status(400).json({ success: false, message: "role is required: main_case_holder or invited_person" });
+
+        // ✅ email validate (agar diya ho to)
+        if (email?.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email.trim()))
+                return res.status(400).json({ success: false, message: "Invalid email format" });
+        }
 
         const template = await Template.findOne({ _id: templateId, isActive: true });
         if (!template)
             return res.status(404).json({ success: false, message: "Template not found or inactive" });
 
+        // ✅ Template mein party exist karti hai?
         const templateParty = template.parties.find(
             (p) => p.partyName.trim().toLowerCase() === partyName.trim().toLowerCase()
         );
         if (!templateParty)
             return res.status(400).json({ success: false, message: `Party "${partyName}" not found in template` });
 
-        if (!templateParty.isMainCaseHolder)
+        // ✅ role ke hisaab se check karo
+        if (role === "main_case_holder" && !templateParty.isMainCaseHolder)
             return res.status(400).json({ success: false, message: `Party "${partyName}" cannot be main case holder` });
 
+        if (role === "invited_person" && !templateParty.isInvitedPerson)
+            return res.status(400).json({ success: false, message: `Party "${partyName}" cannot be invited person` });
+
+        // ✅ Kya ye user pehle se is template ka main case holder hai?
         const existingRecord = await UserFilledTemplate.findOne({
             templateId: template._id,
             userId: req.user._id,
@@ -121,18 +264,20 @@ const startTemplate = async (req, res) => {
 
         const uploadedImageMap = buildFilledImageMap(req.files);
 
+        // ✅ Required fields validate karo
         const missing = validateRequiredFields(templateParty.fields, filledFields, uploadedImageMap);
         if (missing.length > 0)
             return res.status(400).json({ success: false, message: `Required fields missing: ${missing.join(", ")}` });
 
         const enrichedFields = enrichFilledFields(filledFields, templateParty.fields, uploadedImageMap);
 
+        // ✅ Baaki parties "pending" ke saath initialize karo
         const allParties = template.parties.map((p) => {
             if (p.partyName.trim().toLowerCase() === partyName.trim().toLowerCase()) {
                 return {
                     partyName: p.partyName,
-                    role: "main_case_holder",
-                    email: null,
+                    role: role,
+                    email: email?.trim().toLowerCase() || null, // ✅ email save hogi
                     userId: req.user._id,
                     inviteToken: null,
                     status: "filled",
@@ -175,9 +320,7 @@ const startTemplate = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-// STEP 2: inviteParties
-// ─────────────────────────────────────────────────────────────
+
 const inviteParties = async (req, res) => {
     try {
         const { templateId } = req.params;
@@ -239,14 +382,16 @@ const inviteParties = async (req, res) => {
             party.inviteToken = inviteToken;
             party.status = "invited";
 
-            // ✅ Accept link -> backend GET route
-
-
-
+            // ✅ NEW: Check karo email already registered hai ya nahi
+            const existingUser = await User.findOne({ email: invite.email.trim().toLowerCase() });
+            party.isUserRegistered = !!existingUser;
 
             const acceptLink = `http://192.168.11.64:5000/api/templates/${userFilledTemplate._id}/accept/${inviteToken}`;
-            // ✅ Login link -> frontend
-            const loginLink = `http://192.168.11.63:5173/login`;
+
+            // ✅ NEW: registered hai to login, nahi hai to register
+            const loginLink = existingUser
+                ? `http://192.168.11.63:5174/login`
+                : `http://192.168.11.63:5174/register`;
 
             try {
                 await sendInviteEmail({
@@ -254,8 +399,10 @@ const inviteParties = async (req, res) => {
                     toName: invite.partyName,
                     inviterName: mainCaseHolder.fullName,
                     templateTitle: template.title,
-                    acceptLink,   // ✅ accept button ke liye
-                    loginLink,    // ✅ login button ke liye
+                    acceptLink,
+                    loginLink,
+                    inviteToken,
+                    isRegistered: !!existingUser, // ✅ NEW
                 });
                 console.log(`✅ Invite email sent to: ${invite.email}`);
             } catch (emailErr) {
@@ -277,9 +424,7 @@ const inviteParties = async (req, res) => {
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-// STEP 3: acceptInvite
-// ─────────────────────────────────────────────────────────────
+
 const acceptInvite = async (req, res) => {
     try {
         const { templateId, token } = req.params;
@@ -293,32 +438,30 @@ const acceptInvite = async (req, res) => {
         });
 
         if (!userFilledTemplate)
-            return res.redirect("http://192.168.11.63:5173/login?error=invalid_token");
+            return res.redirect("http://192.168.11.63:5174/login?error=invalid_token"); // ✅ 5174
 
         const party = userFilledTemplate.parties.find((p) => p.inviteToken === token);
 
         if (!party)
-            return res.redirect("http://192.168.11.63:5173/login?error=party_not_found");
+            return res.redirect("http://192.168.11.63:5174/login?error=party_not_found"); // ✅ 5174
 
         if (party.status === "accepted" || party.status === "filled")
-            return res.redirect("http://192.168.11.63:5173/login?error=already_accepted");
+            return res.redirect("http://192.168.11.63:5174/login?error=already_accepted"); // ✅ 5174
 
         // ✅ Status update karo
         party.status = "accepted";
         await userFilledTemplate.save();
 
         // ✅ Login page pe redirect karo
-        return res.redirect("http://192.168.11.63:5173/login?invite=accepted");
+        return res.redirect("http://192.168.11.63:5174/login?invite=accepted"); // ✅ 5174
 
     } catch (error) {
         console.error("acceptInvite Error:", error);
-        return res.redirect("http://192.168.11.63:5173/login?error=server_error");
+        return res.redirect("http://192.168.11.63:5174/login?error=server_error"); // ✅ 5174
     }
 };
 
-// ─────────────────────────────────────────────────────────────
-// STEP 4: fillParty
-// ─────────────────────────────────────────────────────────────
+
 const fillParty = async (req, res) => {
     try {
         const { templateId, partyId } = req.params;
@@ -373,6 +516,7 @@ const fillParty = async (req, res) => {
         party.userId = req.user._id;
         party.status = "filled";
         party.filledFields = enrichedFields;
+        party.isUserRegistered = true;
 
         const allFilled = userFilledTemplate.parties.every((p) => p.status === "filled");
         if (allFilled) {
@@ -408,7 +552,46 @@ const fillParty = async (req, res) => {
     }
 };
 
+const getTemplateParties = async (req, res) => {
+    try {
+        const { templateId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(templateId))
+            return res.status(400).json({ success: false, message: "Invalid template ID" });
+
+        const template = await Template.findOne({ _id: templateId, isActive: true }).select("-__v");
+        if (!template)
+            return res.status(404).json({ success: false, message: "Template not found or inactive" });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                templateId: template._id,
+                title: template.title,
+                practiceArea: template.practiceArea,
+                category: template.category,
+                description: template.description,
+                // ✅ Har party ke liye sirf naam + role options
+                parties: template.parties.map((p) => ({
+                    partyName: p.partyName,
+                    // ✅ User in options mein se select karega
+                    roleOptions: [
+                        ...(p.isMainCaseHolder ? [{ role: "main_case_holder", label: "Main Case Holder" }] : []),
+                        ...(p.isInvitedPerson ? [{ role: "invited_person", label: "Invited Person" }] : []),
+                    ],
+                })),
+            },
+        });
+
+    } catch (error) {
+        console.error("getTemplateParties Error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
 module.exports = {
+    getTemplateParties,
+    getPartyFields,
     startTemplate,
     inviteParties,
     acceptInvite,

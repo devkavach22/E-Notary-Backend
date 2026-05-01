@@ -5,9 +5,7 @@ const UserFilledTemplate = require("../models/UserFilledTemplate");
 const VALID_FIELD_TYPES = ["text", "number", "date", "textarea", "image", "file", "dropdown"];
 const { sendTemplateAcceptedEmail, sendTemplateRejectedEmail } = require("./sendOTP");
 
-// ── Helpers ─────────────────────────────────────────────────
 
-// ✅ SAME - bilkul nahi badla
 const buildImageMap = (multerFiles = [], prefix = "templateImage_") => {
   const map = {};
   for (const file of multerFiles) {
@@ -19,7 +17,6 @@ const buildImageMap = (multerFiles = [], prefix = "templateImage_") => {
   return map;
 };
 
-// ✅ SAME - bilkul nahi badla
 const formatFields = (fields, imageMap = {}) =>
   fields.map((f) => {
     const base = {
@@ -38,7 +35,6 @@ const formatFields = (fields, imageMap = {}) =>
     return base;
   });
 
-// ✅ SAME - bilkul nahi badla
 const cleanFieldsForResponse = (fields) =>
   fields.map((f) => {
     const field = {
@@ -52,7 +48,6 @@ const cleanFieldsForResponse = (fields) =>
     return field;
   });
 
-// ✅ SAME - bilkul nahi badla
 const validateFields = (fields, partyLabel = "") => {
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i];
@@ -69,7 +64,6 @@ const validateFields = (fields, partyLabel = "") => {
   return null;
 };
 
-// ✅ UPDATED - isMainCaseHolder, isInvitedPerson validation add kiya
 const validateParties = (parties) => {
   for (let i = 0; i < parties.length; i++) {
     const party = parties[i];
@@ -113,28 +107,29 @@ const validateParties = (parties) => {
   return null;
 };
 
-// ✅ UPDATED - isMainCaseHolder, isInvitedPerson add kiya
 const formatParties = (parties, imageMap = {}) =>
   parties.map((p) => ({
     partyName: p.partyName.trim(),
-    isMainCaseHolder: p.isMainCaseHolder ?? false, // ✅ NEW
-    isInvitedPerson: p.isInvitedPerson ?? false,   // ✅ NEW
+    isMainCaseHolder: p.isMainCaseHolder ?? false, 
+    isInvitedPerson: p.isInvitedPerson ?? false,   
     email: p.email?.trim().toLowerCase() || null,
     fields: formatFields(p.fields, imageMap),
   }));
 
-// ✅ UPDATED - isMainCaseHolder, isInvitedPerson response mein add kiya
+
+
+
+
 const cleanPartiesForResponse = (parties) =>
   parties.map((p) => ({
     partyName: p.partyName,
-    isMainCaseHolder: p.isMainCaseHolder, // ✅ NEW
-    isInvitedPerson: p.isInvitedPerson,   // ✅ NEW
+    isMainCaseHolder: p.isMainCaseHolder,
+    isInvitedPerson: p.isInvitedPerson,  
     email: p.email,
     fields: cleanFieldsForResponse(p.fields),
   }));
 
 
-// ── CREATE TEMPLATE ──────────────────────────────────────────
 const createTemplate = async (req, res) => {
   try {
     console.log("=== createTemplate START ===");
@@ -144,7 +139,7 @@ const createTemplate = async (req, res) => {
     const { practiceArea, category, title, description, templateLayout } = req.body;
 
     let parties = [];
-    let fields  = [];
+    let fields = [];
     try {
       if (req.body.parties) {
         parties = typeof req.body.parties === "string"
@@ -200,7 +195,7 @@ const createTemplate = async (req, res) => {
     const imageMap = buildImageMap(req.files || [], "templateImage_");
 
     const hasParties = Array.isArray(parties) && parties.length > 0;
-    const hasFields  = Array.isArray(fields)  && fields.length  > 0;
+    const hasFields = Array.isArray(fields) && fields.length > 0;
 
     if (hasParties) {
       const partyError = validateParties(parties);
@@ -213,7 +208,7 @@ const createTemplate = async (req, res) => {
     }
 
     const formattedParties = hasParties ? formatParties(parties, imageMap) : [];
-    const formattedFields  = hasFields  ? formatFields(fields, imageMap)   : [];
+    const formattedFields = hasFields ? formatFields(fields, imageMap) : [];
 
     const template = await Template.create({
       advocateId,
@@ -224,13 +219,13 @@ const createTemplate = async (req, res) => {
       description: description?.trim() || "",
       templateLayout: templateLayout || "",
       parties: formattedParties,
-      fields:  formattedFields,
+      fields: formattedFields,
     });
 
     const responseData = {
       ...template.toObject(),
       parties: cleanPartiesForResponse(template.parties),
-      fields:  cleanFieldsForResponse(template.fields),
+      fields: cleanFieldsForResponse(template.fields),
     };
 
     console.log("=== createTemplate END ===");
@@ -249,7 +244,6 @@ const createTemplate = async (req, res) => {
   }
 };
 
-// ── GET TEMPLATES ────────────────────────────────────────────
 const getTemplates = async (req, res) => {
   try {
     const advocateId = req.advocate._id;
@@ -290,7 +284,6 @@ const getTemplates = async (req, res) => {
   }
 };
 
-// ── EDIT TEMPLATE ────────────────────────────────────────────
 const editTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
@@ -468,7 +461,6 @@ const editTemplate = async (req, res) => {
   }
 };
 
-// ── GET TEMPLATE BY ID ───────────────────────────────────────
 const getTemplateById = async (req, res) => {
   try {
     const { templateId } = req.params;
@@ -495,7 +487,50 @@ const getTemplateById = async (req, res) => {
   }
 };
 
-// ── DELETE TEMPLATE ──────────────────────────────────────────
+const getFilledTemplates = async (req, res) => {
+  try {
+    const advocateId = req.advocate._id;
+    const { templateId, page = 1, limit = 10 } = req.query;
+
+    const filter = { advocateId };
+    if (templateId) {
+      if (!mongoose.Types.ObjectId.isValid(templateId))
+        return res.status(400).json({ success: false, message: "Invalid template ID" });
+      filter.templateId = templateId;
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [submissions, total] = await Promise.all([
+      UserFilledTemplate.find(filter)
+        .populate("userId", "fullName email mobile")           // ✅ main case holder
+        .populate("parties.userId", "fullName email mobile")   // ✅ NEW: har party ka user
+        .populate("templateId", "title practiceArea category")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .select("-__v"),
+      UserFilledTemplate.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: submissions,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    });
+
+  } catch (error) {
+    console.error("getFilledTemplates Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+
 const deleteTemplate = async (req, res) => {
   try {
     const { templateId } = req.params;
@@ -524,51 +559,6 @@ const deleteTemplate = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-
-// ── GET FILLED TEMPLATES (Advocate) ─────────────────────────
-const getFilledTemplates = async (req, res) => {
-  try {
-    const advocateId = req.advocate._id;
-    const { templateId, page = 1, limit = 10 } = req.query;
-
-    const filter = { advocateId };
-    if (templateId) {
-      if (!mongoose.Types.ObjectId.isValid(templateId))
-        return res.status(400).json({ success: false, message: "Invalid template ID" });
-      filter.templateId = templateId;
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [submissions, total] = await Promise.all([
-      UserFilledTemplate.find(filter)
-        .populate("userId", "fullName email mobile")
-        .populate("templateId", "title practiceArea category")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .select("-__v"),
-      UserFilledTemplate.countDocuments(filter),
-    ]);
-
-    return res.status(200).json({
-      success: true,
-      data: submissions,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
-    });
-
-  } catch (error) {
-    console.error("getFilledTemplates Error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
-  }
-};
-
-// ── ACCEPT SUBMISSION ────────────────────────────────────────
 const acceptSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
@@ -622,7 +612,6 @@ const acceptSubmission = async (req, res) => {
   }
 };
 
-// ── REJECT SUBMISSION ────────────────────────────────────────
 const rejectSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
@@ -688,10 +677,8 @@ const rejectSubmission = async (req, res) => {
   }
 };
 
-// ── Date Helper ──────────────────────────────────────────────
 const formatDate = (date) => new Date(date).toISOString().split("T")[0];
 
-// ── ADVOCATE DASHBOARD ───────────────────────────────────────
 const getAdvocateDashboard = async (req, res) => {
   try {
     const advocateId = req.advocate._id;
