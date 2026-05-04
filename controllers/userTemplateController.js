@@ -438,26 +438,26 @@ const acceptInvite = async (req, res) => {
         });
 
         if (!userFilledTemplate)
-            return res.redirect("http://192.168.11.63:5174/login?error=invalid_token"); // ✅ 5174
+            return res.redirect("http://192.168.11.63:5174/login?error=invalid_token"); 
 
         const party = userFilledTemplate.parties.find((p) => p.inviteToken === token);
 
         if (!party)
-            return res.redirect("http://192.168.11.63:5174/login?error=party_not_found"); // ✅ 5174
+            return res.redirect("http://192.168.11.63:5174/login?error=party_not_found"); 
 
         if (party.status === "accepted" || party.status === "filled")
-            return res.redirect("http://192.168.11.63:5174/login?error=already_accepted"); // ✅ 5174
+            return res.redirect("http://192.168.11.63:5174/login?error=already_accepted"); 
 
         // ✅ Status update karo
         party.status = "accepted";
         await userFilledTemplate.save();
 
         // ✅ Login page pe redirect karo
-        return res.redirect("http://192.168.11.63:5174/login?invite=accepted"); // ✅ 5174
+        return res.redirect("http://192.168.11.63:5174/login?invite=accepted");
 
     } catch (error) {
         console.error("acceptInvite Error:", error);
-        return res.redirect("http://192.168.11.63:5174/login?error=server_error"); // ✅ 5174
+        return res.redirect("http://192.168.11.63:5174/login?error=server_error");
     }
 };
 

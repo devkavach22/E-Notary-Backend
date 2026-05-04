@@ -1371,6 +1371,168 @@ const sendInviteEmail = async ({
   });
 };
 
+
+const sendMeetingInviteEmail = async ({ toEmail, toName, advocateName, templateTitle, meetingLink, uniqueCode, scheduledAt, scheduledEndAt }) => {
+
+  const formatDateTime = (date) => {
+    return new Date(date).toLocaleString("en-IN", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const mailOptions = {
+    from: process.env.EMAIL_FROM,
+    to: toEmail,
+    subject: `📅 Meeting Invitation — ${templateTitle}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:'Segoe UI',Arial,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4f8;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+          
+          <!-- HEADER -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#1a3c6e 0%,#2563eb 100%);padding:40px 40px 30px;text-align:center;">
+              <div style="font-size:42px;margin-bottom:10px;">⚖️</div>
+              <h1 style="color:#ffffff;margin:0;font-size:26px;font-weight:700;letter-spacing:0.5px;">Meeting Invitation</h1>
+              <p style="color:#93c5fd;margin:8px 0 0;font-size:14px;">Legal Consultation Request</p>
+            </td>
+          </tr>
+
+          <!-- GREETING -->
+          <tr>
+            <td style="padding:36px 40px 0;">
+              <p style="font-size:16px;color:#374151;margin:0;">Dear <strong style="color:#1a3c6e;">${toName}</strong>,</p>
+              <p style="font-size:15px;color:#6b7280;margin:12px 0 0;line-height:1.7;">
+                Advocate <strong style="color:#1a3c6e;">${advocateName}</strong> has scheduled a meeting with you regarding the matter:
+              </p>
+              <div style="background:#eff6ff;border-left:4px solid #2563eb;border-radius:6px;padding:14px 18px;margin:16px 0 0;">
+                <p style="margin:0;font-size:16px;font-weight:600;color:#1e40af;">📄 ${templateTitle}</p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- MEETING DETAILS CARD -->
+          <tr>
+            <td style="padding:28px 40px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
+                <tr>
+                  <td style="background:#1a3c6e;padding:14px 20px;">
+                    <p style="margin:0;color:#ffffff;font-size:14px;font-weight:600;letter-spacing:0.5px;">📋 MEETING DETAILS</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:20px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      
+                      <tr>
+                        <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;">
+                          <p style="margin:0;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;">🕐 Start Time</p>
+                          <p style="margin:4px 0 0;font-size:15px;color:#111827;font-weight:600;">${formatDateTime(scheduledAt)}</p>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;">
+                          <p style="margin:0;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;">🕑 End Time</p>
+                          <p style="margin:4px 0 0;font-size:15px;color:#111827;font-weight:600;">${formatDateTime(scheduledEndAt)}</p>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td style="padding:10px 0;">
+                          <p style="margin:0;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;">👤 Invited By</p>
+                          <p style="margin:4px 0 0;font-size:15px;color:#111827;font-weight:600;">Adv. ${advocateName}</p>
+                        </td>
+                      </tr>
+
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- UNIQUE CODE -->
+          <tr>
+            <td style="padding:28px 40px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;border:1px solid #fcd34d;">
+                <tr>
+                  <td style="padding:24px;text-align:center;">
+                    <p style="margin:0;font-size:13px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:1px;">🔐 Your Unique Meeting Code</p>
+                    <p style="margin:12px 0 0;font-size:42px;font-weight:800;color:#1a3c6e;letter-spacing:8px;">${uniqueCode}</p>
+                    <p style="margin:10px 0 0;font-size:12px;color:#92400e;">Use this code when joining the meeting for verification</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- JOIN BUTTON -->
+          <tr>
+            <td style="padding:28px 40px 0;text-align:center;">
+              <a href="${meetingLink}" 
+                 style="display:inline-block;background:linear-gradient(135deg,#1a3c6e,#2563eb);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:50px;font-size:16px;font-weight:700;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(37,99,235,0.4);">
+                🎥 Join Meeting
+              </a>
+              <p style="margin:12px 0 0;font-size:12px;color:#9ca3af;">
+                Or copy this link: 
+                <a href="${meetingLink}" style="color:#2563eb;word-break:break-all;">${meetingLink}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- NOTE -->
+          <tr>
+            <td style="padding:28px 40px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#fef2f2;border-radius:10px;border:1px solid #fecaca;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">⚠️ Important</p>
+                    <p style="margin:6px 0 0;font-size:13px;color:#7f1d1d;line-height:1.6;">
+                      Please keep your unique code safe. You will need it to verify your identity when joining the meeting. Do not share it with anyone.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="padding:36px 40px;text-align:center;border-top:1px solid #e2e8f0;margin-top:28px;">
+              <p style="margin:0;font-size:13px;color:#9ca3af;">This is an automated email. Please do not reply.</p>
+              <p style="margin:8px 0 0;font-size:12px;color:#d1d5db;">© 2026 Kavach Legal Platform. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
 module.exports = {
   generateOTP,
   sendOTPEmail,
@@ -1384,5 +1546,6 @@ module.exports = {
   sendTemplateSubmissionEmail,
   sendTemplateAcceptedEmail,
   sendTemplateRejectedEmail,
-  sendInviteEmail
+  sendInviteEmail,
+  sendMeetingInviteEmail
 };

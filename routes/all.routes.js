@@ -4,6 +4,7 @@ const {
   sendOTP, verifyOTP, sendMobileOTP, verifyMobileOTP,
   registerAdvocate, getPracticeAreas, getLoginAdvocate, editAdvocateProfile
 } = require("../controllers/advocate.controller");
+const { scheduleMeeting ,getAdvocateWeeklySchedule,getUserMeetingsDashboard} = require("../controllers/meetingController");
 
 const {
   createTemplate,
@@ -60,6 +61,9 @@ router.get("/advocate/me", advocateAuth, getLoginAdvocate);
 router.put("/advocate/profile/edit", advocateAuth, advocateUpload, handleUploadError, editAdvocateProfile);
 router.get("/advocate/dashboard", advocateAuth, getAdvocateDashboard);
 
+router.post("/:userFilledTemplateId/schedule", advocateAuth, scheduleMeeting);
+router.get("/weekly-schedule", advocateAuth, getAdvocateWeeklySchedule); 
+router.get("/user/meetings/dashboard", userAuth, getUserMeetingsDashboard);
 
 router.post("/create/template", templateImageUpload, handleUploadError, advocateAuth, createTemplate);
 router.get("/templates", advocateAuth, getTemplates);
